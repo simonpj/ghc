@@ -255,7 +255,6 @@ data DynFlag
 
    -- optimisation opts
    | Opt_Strictness
-   | Opt_NewStrictness
    | Opt_FullLaziness
    | Opt_FloatIn
    | Opt_Specialise
@@ -1984,7 +1983,6 @@ fFlags :: [FlagSpec DynFlag]
 fFlags = [
   ( "print-explicit-foralls",           Opt_PrintExplicitForalls, nop ),
   ( "strictness",                       Opt_Strictness, nop ),
-  ( "new-strictness",                   Opt_NewStrictness, nop ),
   ( "specialise",                       Opt_Specialise, nop ),
   ( "float-in",                         Opt_FloatIn, nop ),
   ( "static-argument-transformation",   Opt_StaticArgumentTransformation, nop ),
@@ -2275,7 +2273,6 @@ optLevelFlags
     , ([1,2],   Opt_DoEtaReduction)
     , ([1,2],   Opt_CaseMerge)
     , ([1,2],   Opt_Strictness)
-    , ([1,2],   Opt_NewStrictness)
     , ([1,2],   Opt_CSE)
     , ([1,2],   Opt_FullLaziness)
     , ([1,2],   Opt_Specialise)

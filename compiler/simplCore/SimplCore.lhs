@@ -121,8 +121,7 @@ getCoreToDo dflags
     phases        = simplPhases        dflags
     max_iter      = maxSimplIterations dflags
     rule_check    = ruleCheck          dflags
-    strictness    = (dopt Opt_Strictness                  dflags
-                    || dopt Opt_NewStrictness             dflags) 
+    strictness    = dopt Opt_Strictness                   dflags 
     new_demand    = xopt Opt_NewDemandAnalyser            dflags
     full_laziness = dopt Opt_FullLaziness                 dflags
     do_specialise = dopt Opt_Specialise                   dflags
