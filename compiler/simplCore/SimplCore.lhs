@@ -44,6 +44,7 @@ import SAT              ( doStaticArgs )
 import Specialise       ( specProgram)
 import SpecConstr       ( specConstrProgram)
 import DmdAnal          ( dmdAnalPgm )
+import NewDmdAnal       ( dmdAnalProgram )
 import WorkWrap         ( wwTopBinds )
 import Vectorise        ( vectorise )
 import FastString
@@ -120,7 +121,9 @@ getCoreToDo dflags
     phases        = simplPhases        dflags
     max_iter      = maxSimplIterations dflags
     rule_check    = ruleCheck          dflags
-    strictness    = dopt Opt_Strictness                   dflags
+    strictness    = (dopt Opt_Strictness                  dflags
+                    || dopt Opt_NewStrictness             dflags) 
+    new_demand    = xopt Opt_NewDemandAnalyser            dflags
     full_laziness = dopt Opt_FullLaziness                 dflags
     do_specialise = dopt Opt_Specialise                   dflags
     do_float_in   = dopt Opt_FloatIn                      dflags
@@ -189,6 +192,14 @@ getCoreToDo dflags
                                   , sm_case_case = False })
                           -- Don't do case-of-case transformations.
                           -- This makes full laziness work better
+    demand_phases = (CoreDoPasses [
+                       CoreDoStrictness,
+                       CoreDoWorkerWrapper,
+                       simpl_phase 0 ["post-worker-wrapper"] max_iter
+                    ])
+    
+    -- so far, do nothing
+    new_demand_phases = CoreDoNewStrictness
 
     core_todo =
      if opt_level == 0 then
@@ -256,11 +267,8 @@ getCoreToDo dflags
                 -- Don't stop now!
         simpl_phase 0 ["main"] (max max_iter 3),
 
-        runWhen strictness (CoreDoPasses [
-                CoreDoStrictness,
-                CoreDoWorkerWrapper,
-                simpl_phase 0 ["post-worker-wrapper"] max_iter
-                ]),
+        runWhen strictness (if new_demand then new_demand_phases
+                            else demand_phases),
 
         runWhen full_laziness $
            CoreDoFloatOutwards FloatOutSwitches {
@@ -389,6 +397,9 @@ doCorePass _      CoreDoStaticArgs          = {-# SCC "StaticArgs" #-}
 
 doCorePass _      CoreDoStrictness          = {-# SCC "Stranal" #-}
                                               doPassDM dmdAnalPgm
+
+doCorePass _      CoreDoNewStrictness       = {-# SCC "NewStranal" #-}
+                                              doPassDM dmdAnalProgram
 
 doCorePass dflags CoreDoWorkerWrapper       = {-# SCC "WorkWrap" #-}
                                               doPassU (wwTopBinds dflags)

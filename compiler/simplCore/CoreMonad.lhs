@@ -245,6 +245,7 @@ data CoreToDo           -- These are diff core-to-core passes,
   | CoreDoPrintCore
   | CoreDoStaticArgs
   | CoreDoStrictness
+  | CoreDoNewStrictness
   | CoreDoWorkerWrapper
   | CoreDoSpecialising
   | CoreDoSpecConstr
@@ -273,6 +274,7 @@ coreDumpFlag (CoreDoFloatOutwards {}) = Just Opt_D_verbose_core2core
 coreDumpFlag CoreLiberateCase         = Just Opt_D_verbose_core2core
 coreDumpFlag CoreDoStaticArgs 	      = Just Opt_D_verbose_core2core
 coreDumpFlag CoreDoStrictness 	      = Just Opt_D_dump_stranal
+coreDumpFlag CoreDoNewStrictness      = Just Opt_D_dump_new_stranal
 coreDumpFlag CoreDoWorkerWrapper      = Just Opt_D_dump_worker_wrapper
 coreDumpFlag CoreDoSpecialising       = Just Opt_D_dump_spec
 coreDumpFlag CoreDoSpecConstr         = Just Opt_D_dump_spec
@@ -296,6 +298,7 @@ instance Outputable CoreToDo where
   ppr CoreLiberateCase         = ptext (sLit "Liberate case")
   ppr CoreDoStaticArgs 	       = ptext (sLit "Static argument")
   ppr CoreDoStrictness 	       = ptext (sLit "Demand analysis")
+  ppr CoreDoNewStrictness      = ptext (sLit "New demand analysis")
   ppr CoreDoWorkerWrapper      = ptext (sLit "Worker Wrapper binds")
   ppr CoreDoSpecialising       = ptext (sLit "Specialise")
   ppr CoreDoSpecConstr         = ptext (sLit "SpecConstr")

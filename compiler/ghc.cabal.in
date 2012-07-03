@@ -368,6 +368,7 @@ Library
         StgLint
         StgSyn
         DmdAnal
+        NewDmdAnal
         WorkWrap
         WwLib
         FamInst

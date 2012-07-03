@@ -212,6 +212,7 @@ data DynFlag
    | Opt_D_dump_prep
    | Opt_D_dump_stg
    | Opt_D_dump_stranal
+   | Opt_D_dump_new_stranal
    | Opt_D_dump_tc
    | Opt_D_dump_types
    | Opt_D_dump_rules
@@ -254,6 +255,7 @@ data DynFlag
 
    -- optimisation opts
    | Opt_Strictness
+   | Opt_NewStrictness
    | Opt_FullLaziness
    | Opt_FloatIn
    | Opt_Specialise
@@ -485,6 +487,7 @@ data ExtensionFlag
    | Opt_NondecreasingIndentation
    | Opt_RelaxedLayout
    | Opt_TraditionalRecordSyntax
+   | Opt_NewDemandAnalyser
    deriving (Eq, Enum, Show)
 
 -- | Contains not only a collection of 'DynFlag's but also a plethora of
@@ -1721,6 +1724,7 @@ dynamic_flags = [
   , Flag "ddump-prep"              (setDumpFlag Opt_D_dump_prep)
   , Flag "ddump-stg"               (setDumpFlag Opt_D_dump_stg)
   , Flag "ddump-stranal"           (setDumpFlag Opt_D_dump_stranal)
+  , Flag "ddump-new-stranal"       (setDumpFlag Opt_D_dump_new_stranal)
   , Flag "ddump-tc"                (setDumpFlag Opt_D_dump_tc)
   , Flag "ddump-types"             (setDumpFlag Opt_D_dump_types)
   , Flag "ddump-rules"             (setDumpFlag Opt_D_dump_rules)
@@ -1980,6 +1984,7 @@ fFlags :: [FlagSpec DynFlag]
 fFlags = [
   ( "print-explicit-foralls",           Opt_PrintExplicitForalls, nop ),
   ( "strictness",                       Opt_Strictness, nop ),
+  ( "new-strictness",                   Opt_NewStrictness, nop ),
   ( "specialise",                       Opt_Specialise, nop ),
   ( "float-in",                         Opt_FloatIn, nop ),
   ( "static-argument-transformation",   Opt_StaticArgumentTransformation, nop ),
@@ -2192,7 +2197,8 @@ xFlags = [
   ( "OverlappingInstances",             Opt_OverlappingInstances, nop ),
   ( "UndecidableInstances",             Opt_UndecidableInstances, nop ),
   ( "IncoherentInstances",              Opt_IncoherentInstances, nop ),
-  ( "PackageImports",                   Opt_PackageImports, nop )
+  ( "PackageImports",                   Opt_PackageImports, nop ),
+  ( "NewDemandAnalyser",                Opt_NewDemandAnalyser, nop )
   ]
 
 defaultFlags :: [DynFlag]
@@ -2269,6 +2275,7 @@ optLevelFlags
     , ([1,2],   Opt_DoEtaReduction)
     , ([1,2],   Opt_CaseMerge)
     , ([1,2],   Opt_Strictness)
+    , ([1,2],   Opt_NewStrictness)
     , ([1,2],   Opt_CSE)
     , ([1,2],   Opt_FullLaziness)
     , ([1,2],   Opt_Specialise)
