@@ -7,17 +7,27 @@
 \begin{code}
 
 module NewDemand (
+        LatticeLike,
         StrDmd(..), strBot, strTop, strStr, strProd,
         AbsDmd(..), absBot, absTop, absProd,
         JointDmd(..), mkJointDmd,
-        DmdEnv, 
-        DmdResult, 
+	DmdType(..), topDmdType, botDmdType, mkDmdType, mkTopDmdType, 
+		dmdTypeDepth, 
+	DmdEnv, emptyDmdEnv,
+	DmdResult(..), retCPR, isBotRes, returnsCPR, resTypeArgDmd,
+        appIsBottom, isBottomingSig, pprIfaceStrictSig, 
+	StrictSig(..), mkStrictSig, topSig, botSig, cprSig,
+        isTopSig, 	splitStrictSig, increaseStrictSigArity,
      ) where
 
 #include "HsVersions.h"
 
+import StaticFlags
 import Outputable
 import VarEnv
+import UniqFM
+import Util
+import BasicTypes
 
 \end{code}
 
@@ -147,7 +157,7 @@ instance LatticeLike AbsDmd where
   top                            = Used
  
   pre Abs _                      = True
-  pre _   Used                   = True
+  pre _ Used                     = True
   pre (UProd ux1) (UProd ux2)
      | length ux1 == length ux2  = all (== True) $ zipWith pre ux1 ux2 
   pre x y                        = x == y
@@ -176,7 +186,7 @@ data JointDmd = JD { str :: StrDmd, abs :: AbsDmd }
   deriving ( Eq, Show )
 
 instance Outputable JointDmd where
-  ppr (JD s a) = parens (ppr s <> char ',' <> ppr a)
+  ppr (JD s a) = angleBrackets (ppr s <> char ',' <> ppr a)
 
 -- Well-formedness preserving constructors for the joint domain
 mkJointDmd :: StrDmd -> AbsDmd -> JointDmd
@@ -201,7 +211,7 @@ instance LatticeLike JointDmd where
 
 %************************************************************************
 %*									*
-\subsection{Demand environments, types and signatures}
+\subsection{Demand environments, types and results}
 %*									*
 %************************************************************************
 
@@ -216,4 +226,154 @@ data DmdResult = TopRes	-- Nothing known
 	-- Equality for fixpoints
 	-- Show needed for Show in Lex.Token (sigh)
 
+data DmdType = DmdType 
+		    DmdEnv	-- Demand on explicitly-mentioned 
+				--	free variables
+		    [JointDmd]	-- Demand on arguments
+		    DmdResult	-- Nature of result
+
+-- Equality needed for fixpoints in DmdAnal
+instance Eq DmdType where
+  (==) (DmdType fv1 ds1 res1)
+       (DmdType fv2 ds2 res2) =  ufmToList fv1 == ufmToList fv2
+			      && ds1 == ds2 && res1 == res2
+
+instance Outputable DmdType where
+  ppr (DmdType fv ds res) 
+    = hsep [text "DmdType",
+	    hcat (map ppr ds) <> ppr res,
+	    if null fv_elts then empty
+	    else braces (fsep (map pp_elt fv_elts))]
+    where
+      pp_elt (uniq, dmd) = ppr uniq <> text "->" <> ppr dmd
+      fv_elts = ufmToList fv
+
+instance Outputable DmdResult where
+  ppr TopRes = empty	  -- Keep these distinct from Demand letters
+  ppr RetCPR = char 'm'	  -- so that we can print strictness sigs as
+  ppr BotRes = char 'b'   --    dddr
+			  -- without ambiguity
+-- This guy lets us switch off CPR analysis
+-- by making sure that everything uses TopRes instead of RetCPR
+-- Assuming, of course, that they don't mention RetCPR by name.
+-- They should onlyu use retCPR
+retCPR :: DmdResult
+retCPR | opt_CprOff = TopRes
+       | otherwise  = RetCPR
+
+emptyDmdEnv :: VarEnv JointDmd
+emptyDmdEnv = emptyVarEnv
+
+topDmdType, botDmdType, cprDmdType :: DmdType
+topDmdType = DmdType emptyDmdEnv [] TopRes
+botDmdType = DmdType emptyDmdEnv [] BotRes
+cprDmdType = DmdType emptyVarEnv [] retCPR
+
+isTopDmdType :: DmdType -> Bool
+-- Only used on top-level types, hence the assert
+isTopDmdType (DmdType env [] TopRes) = ASSERT( isEmptyVarEnv env) True	
+isTopDmdType _                       = False
+
+isBotRes :: DmdResult -> Bool
+isBotRes BotRes = True
+isBotRes _      = False
+
+resTypeArgDmd :: DmdResult -> JointDmd
+-- TopRes and BotRes are polymorphic, so that
+--	BotRes = Bot -> BotRes
+--	TopRes = Top -> TopRes
+-- This function makes that concrete
+-- We can get a RetCPR, because of the way in which we are (now)
+-- giving CPR info to strict arguments.  On the first pass, when
+-- nothing has demand info, we optimistically give CPR info or RetCPR to all args
+resTypeArgDmd TopRes = top
+resTypeArgDmd RetCPR = top
+resTypeArgDmd BotRes = bot
+
+returnsCPR :: DmdResult -> Bool
+returnsCPR RetCPR = True
+returnsCPR _      = False
+
+mkDmdType :: DmdEnv -> [JointDmd] -> DmdResult -> DmdType
+mkDmdType fv ds res = DmdType fv ds res
+
+mkTopDmdType :: [JointDmd] -> DmdResult -> DmdType
+mkTopDmdType ds res = DmdType emptyDmdEnv ds res
+
+dmdTypeDepth :: DmdType -> Arity
+dmdTypeDepth (DmdType _ ds _) = length ds
+\end{code}
+
+%************************************************************************
+%*									*
+\subsection{Strictness signature}
+%*									*
+%************************************************************************
+
+In a let-bound Id we record its strictness info.  
+In principle, this strictness info is a demand transformer, mapping
+a demand on the Id into a DmdType, which gives
+	a) the free vars of the Id's value
+	b) the Id's arguments
+	c) an indication of the result of applying 
+	   the Id to its arguments
+
+However, in fact we store in the Id an extremely emascuated demand transfomer,
+namely 
+		a single DmdType
+(Nevertheless we dignify StrictSig as a distinct type.)
+
+This DmdType gives the demands unleashed by the Id when it is applied
+to as many arguments as are given in by the arg demands in the DmdType.
+
+For example, the demand transformer described by the DmdType
+		DmdType {x -> <S(LL),U(UU)>} [V,A] Top
+says that when the function is applied to two arguments, it
+unleashes demand <S(LL),U(UU)> on the free var x, V on the first arg,
+and A on the second.  
+
+[??? -- clarify this]
+If this same function is applied to one arg, all we can say is
+that it uses x with U*(LL), and its arg with demand <L,U>.
+
+\begin{code}
+newtype StrictSig = StrictSig DmdType
+		  deriving( Eq )
+
+instance Outputable StrictSig where
+   ppr (StrictSig ty) = ppr ty
+
+mkStrictSig :: DmdType -> StrictSig
+mkStrictSig dmd_ty = StrictSig dmd_ty
+
+splitStrictSig :: StrictSig -> ([JointDmd], DmdResult)
+splitStrictSig (StrictSig (DmdType _ dmds res)) = (dmds, res)
+
+increaseStrictSigArity :: Int -> StrictSig -> StrictSig
+-- Add extra arguments to a strictness signature
+increaseStrictSigArity arity_increase (StrictSig (DmdType env dmds res))
+  = StrictSig (DmdType env (replicate arity_increase top ++ dmds) res)
+
+isTopSig :: StrictSig -> Bool
+isTopSig (StrictSig ty) = isTopDmdType ty
+
+topSig, botSig, cprSig :: StrictSig
+topSig = StrictSig topDmdType
+botSig = StrictSig botDmdType
+cprSig = StrictSig cprDmdType
+	
+
+-- appIsBottom returns true if an application to n args would diverge
+appIsBottom :: StrictSig -> Int -> Bool
+appIsBottom (StrictSig (DmdType _ ds BotRes)) n = listLengthCmp ds n /= GT
+appIsBottom _				      _ = False
+
+isBottomingSig :: StrictSig -> Bool
+isBottomingSig (StrictSig (DmdType _ _ BotRes)) = True
+isBottomingSig _				= False
+
+pprIfaceStrictSig :: StrictSig -> SDoc
+-- Used for printing top-level strictness pragmas in interface files
+pprIfaceStrictSig (StrictSig (DmdType _ dmds res))
+  = hcat (map ppr dmds) <> ppr res
 \end{code}
