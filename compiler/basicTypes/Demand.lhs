@@ -269,7 +269,7 @@ dmdTypeDepth (DmdType _ ds _) = length ds
 
 %************************************************************************
 %*									*
-\subsection{Strictness signature
+\subsection{Strictness signature}
 %*									*
 %************************************************************************
 

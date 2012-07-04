@@ -137,6 +137,7 @@ Library
         BasicTypes
         DataCon
         Demand
+        NewDemand
         Exception
         GhcMonad
         Id
