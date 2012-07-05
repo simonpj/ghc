@@ -47,13 +47,13 @@ class LatticeLike a where
   both   :: a -> a -> a
 
 -- False < True
-instance Lattice Bool where
+instance LatticeLike Bool where
   bot     = False
   top     = True
-  pre x y = (not x) || y
+-- x `pre` y <==> (x => y)
+  pre x y = (not x) || y  
   lub     = (||)
   both    = (&&)
-
 
 \end{code}
 
@@ -376,7 +376,7 @@ cprSig = StrictSig cprDmdType
 	
 -- appIsBottom returns true if an application to n args would diverge
 appIsBottom :: StrictSig -> Int -> Bool
-appIsBottom (StrictSig (DmdType _ ds BotRes)) n = length ds <= n
+appIsBottom (StrictSig (DmdType _ ds BotRes)) n = not $ lengthExceeds ds n 
 appIsBottom _				      _ = False
 
 isBottomingSig :: StrictSig -> Bool
