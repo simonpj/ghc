@@ -46,6 +46,15 @@ class LatticeLike a where
   lub    :: a -> a -> a 
   both   :: a -> a -> a
 
+-- False < True
+instance Lattice Bool where
+  bot     = False
+  top     = True
+  pre x y = (not x) || y
+  lub     = (||)
+  both    = (&&)
+
+
 \end{code}
 
 
@@ -62,7 +71,8 @@ data StrDmd
   = HyperStr             -- Hyperstrict 
   | Lazy                 -- Lazy
   | Str                  -- Strict
-  | SProd [StrDmd]     -- Product or function demand
+  | SProd Bool [StrDmd]  -- Possibly deferred roduct or function demand
+                         -- False === strict, True === deferred
   deriving ( Eq, Show )
 
 
@@ -72,19 +82,20 @@ strBot     = HyperStr
 strTop     = Lazy
 strStr     = Str
 
-strProd :: [StrDmd] -> StrDmd
-strProd sx 
-  = if all (== Lazy) sx then Str else 
-      if any (== HyperStr) sx then HyperStr
-        else SProd sx
+strProd :: Bool -> [StrDmd] -> StrDmd
+strProd def sx 
+  = if all (== Lazy) sx 
+      then if def then Lazy else Str
+      else if (not def) && (any (== HyperStr) sx) then HyperStr
+           else SProd def sx
 
 
 -- Serialization
 instance Outputable StrDmd where
-  ppr HyperStr    = char 'B'
-  ppr Lazy        = char 'L'
-  ppr Str         = char 'S'
-  ppr (SProd sx)  = (char 'S') <> parens (hcat (map ppr sx))
+  ppr HyperStr      = char 'B'
+  ppr Lazy          = char 'L'
+  ppr Str           = char 'S'
+  ppr (SProd d sx)  = (char (if d then 'L' else 'S')) <> parens (hcat (map ppr sx))
 
 -- LatticeLike implementation for strictness demands
 instance LatticeLike StrDmd where
@@ -93,29 +104,30 @@ instance LatticeLike StrDmd where
   
   pre _ Lazy                               = True
   pre HyperStr _                           = True
-  pre (SProd _) Str                        = True
-  pre (SProd sx1) (SProd sx2)    
-            | length sx1 == length sx2     = all (== True) $ zipWith pre sx1 sx2 
+  pre (SProd False _) Str                  = True
+  pre (SProd s1 sx1) (SProd s1 sx2)    
+            | s1 `pre` s2 &&    
+                length sx1 == length sx2   = all (== True) $ zipWith pre sx1 sx2 
   pre x y                                  = x == y
 
   lub x y | x == y                         = x 
   lub y x | x `pre` y                      = lub x y
   lub HyperStr s                           = s
-  lub _ Lazy                               = top
-  lub (SProd _) Str                        = Str
-  lub (SProd sx1) (SProd sx2) 
-           | length sx1 == length sx2      = SProd $ zipWith lub sx1 sx2
-           | otherwise                     = Str
-  lub _ _                                  = top
+  lub _ Lazy                               = absTop
+  lub (SProd False _) Str                  = strStr
+  lub (SProd d1 sx1) (SProd d2 sx2) 
+           | length sx1 == length sx2      = strProd $ d1 `lub` d2 $ zipWith lub sx1 sx2
+           | otherwise                     = strStr
+  lub _ _                                  = strTop
 
   both x y | x == y                        = x 
   both y x | x `pre` y                     = both x y
-  both HyperStr _                          = bot
+  both HyperStr _                          = strBot
   both s Lazy                              = s
-  both s@(SProd _) Str                     = s
-  both (SProd sx1) (SProd sx2) 
-           | length sx1 == length sx2      = SProd $ zipWith both sx1 sx2 
-  both _ _                                 = bot
+  both s@(SProd False _) Str               = s
+  both (SProd d1 sx1) (SProd d2 sx2) 
+           | length sx1 == length sx2      = strProd $ d1 `both` d2 $ zipWith both sx1 sx2 
+  both _ _                                 = strBot
 
 \end{code}
 
@@ -165,10 +177,10 @@ instance LatticeLike AbsDmd where
   lub x y | x == y               = x 
   lub y x | x `pre` y            = lub x y
   lub Abs a                      = a
-  lub _ Used                     = top
+  lub _ Used                     = absTop
   lub (UProd ux1) (UProd ux2)
-     | length ux1 == length ux2  = UProd $ zipWith lub ux1 ux2
-  lub _ _                        = top
+     | length ux1 == length ux2  = absProd $ zipWith lub ux1 ux2
+  lub _ _                        = absTop
 
   both                           = lub
 
@@ -196,15 +208,15 @@ mkJointDmd s a
      _                   -> JD s a
      
 instance LatticeLike JointDmd where
-  bot                        = JD bot bot
-  top                        = JD top top
+  bot                        = mkJointDmd bot bot
+  top                        = mkJointDmd top top
 
   pre x _ | x == bot         = True
   pre _ x | x == top         = True
   pre (JD s1 a1) (JD s2 a2)  = (pre s1 s2) && (pre a1 a2)
 
-  lub  (JD s1 a1) (JD s2 a2) = JD (lub s1 s2) (lub a1 a2)            
-  both (JD s1 a1) (JD s2 a2) = JD (both s1 s2) (both a1 a2)            
+  lub  (JD s1 a1) (JD s2 a2) = mkJointDmd $ lub s1 s2  $ lub a1 a2            
+  both (JD s1 a1) (JD s2 a2) = mkJointDmd $ both s1 s2 $ both a1 a2            
   
 \end{code}
 
@@ -251,7 +263,7 @@ instance Outputable DmdType where
 instance Outputable DmdResult where
   ppr TopRes = empty	  -- Keep these distinct from Demand letters
   ppr RetCPR = char 'm'	  -- so that we can print strictness sigs as
-  ppr BotRes = char 'b'   --    dddr
+  ppr BotRes = char 'b'   --    DDDr
 			  -- without ambiguity
 -- This guy lets us switch off CPR analysis
 -- by making sure that everything uses TopRes instead of RetCPR
@@ -362,10 +374,9 @@ topSig = StrictSig topDmdType
 botSig = StrictSig botDmdType
 cprSig = StrictSig cprDmdType
 	
-
 -- appIsBottom returns true if an application to n args would diverge
 appIsBottom :: StrictSig -> Int -> Bool
-appIsBottom (StrictSig (DmdType _ ds BotRes)) n = listLengthCmp ds n /= GT
+appIsBottom (StrictSig (DmdType _ ds BotRes)) n = length ds <= n
 appIsBottom _				      _ = False
 
 isBottomingSig :: StrictSig -> Bool
