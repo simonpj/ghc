@@ -14,15 +14,15 @@ module NewDemand (
 	DmdType(..), topDmdType, botDmdType, mkDmdType, mkTopDmdType, 
 		dmdTypeDepth, 
 	DmdEnv, emptyDmdEnv,
-	DmdResult(..), retCPR, isBotRes, returnsCPR, resTypeArgDmd,
+	DmdResult(..), isBotRes, resTypeArgDmd,
         appIsBottom, isBottomingSig, pprIfaceStrictSig, 
-	StrictSig(..), mkStrictSig, topSig, botSig, cprSig,
+	StrictSig(..), mkStrictSig, topSig, botSig,
         isTopSig, 	splitStrictSig, increaseStrictSigArity,
      ) where
 
 #include "HsVersions.h"
 
-import StaticFlags
+--import StaticFlags
 import Outputable
 import VarEnv
 import UniqFM
@@ -68,7 +68,7 @@ instance LatticeLike Bool where
 
 -- Vanilla strictness domain
 data StrDmd
-  = HyperStr             -- Hyperstrict 
+  = HyperStr             -- Hyper-strict 
   | Lazy                 -- Lazy
   | Str                  -- Strict
   | SProd Bool [StrDmd]  -- Possibly deferred roduct or function demand
@@ -84,7 +84,7 @@ strStr     = Str
 
 strProd :: Bool -> [StrDmd] -> StrDmd
 strProd def sx 
-  = if all (== Lazy) sx 
+  = if all (== Lazy) sx  -- no demand products with empty lists
       then if def then Lazy else Str
       else if (not def) && (any (== HyperStr) sx) then HyperStr
            else SProd def sx
@@ -105,19 +105,19 @@ instance LatticeLike StrDmd where
   pre _ Lazy                               = True
   pre HyperStr _                           = True
   pre (SProd False _) Str                  = True
-  pre (SProd s1 sx1) (SProd s1 sx2)    
-            | s1 `pre` s2 &&    
-                length sx1 == length sx2   = all (== True) $ zipWith pre sx1 sx2 
+  pre (SProd d1 sx1) (SProd d2 sx2)    
+            | d1 `pre` d2 &&    
+              length sx1 == length sx2   = all (== True) $ zipWith pre sx1 sx2 
   pre x y                                  = x == y
 
   lub x y | x == y                         = x 
   lub y x | x `pre` y                      = lub x y
   lub HyperStr s                           = s
-  lub _ Lazy                               = absTop
+  lub _ Lazy                               = strTop
   lub (SProd False _) Str                  = strStr
   lub (SProd d1 sx1) (SProd d2 sx2) 
-           | length sx1 == length sx2      = strProd $ d1 `lub` d2 $ zipWith lub sx1 sx2
-           | otherwise                     = strStr
+           | length sx1 == length sx2      = strProd (d1 `lub` d2) $ zipWith lub sx1 sx2
+           | otherwise                     = strProd (d1 `lub` d2) $ []
   lub _ _                                  = strTop
 
   both x y | x == y                        = x 
@@ -126,7 +126,7 @@ instance LatticeLike StrDmd where
   both s Lazy                              = s
   both s@(SProd False _) Str               = s
   both (SProd d1 sx1) (SProd d2 sx2) 
-           | length sx1 == length sx2      = strProd $ d1 `both` d2 $ zipWith both sx1 sx2 
+           | length sx1 == length sx2      = strProd (d1 `both` d2) $ zipWith both sx1 sx2 
   both _ _                                 = strBot
 
 \end{code}
@@ -215,8 +215,8 @@ instance LatticeLike JointDmd where
   pre _ x | x == top         = True
   pre (JD s1 a1) (JD s2 a2)  = (pre s1 s2) && (pre a1 a2)
 
-  lub  (JD s1 a1) (JD s2 a2) = mkJointDmd $ lub s1 s2  $ lub a1 a2            
-  both (JD s1 a1) (JD s2 a2) = mkJointDmd $ both s1 s2 $ both a1 a2            
+  lub  (JD s1 a1) (JD s2 a2) = mkJointDmd (lub s1 s2)  $ lub a1 a2            
+  both (JD s1 a1) (JD s2 a2) = mkJointDmd (both s1 s2) $ both a1 a2            
   
 \end{code}
 
@@ -231,19 +231,49 @@ instance LatticeLike JointDmd where
 
 type DmdEnv = VarEnv JointDmd
 
-data DmdResult = TopRes	-- Nothing known	
-	       | RetCPR	-- Returns a constructed product
+data DmdResult = TopRes	-- Nothing known, assumed to be just lazy	
 	       | BotRes	-- Diverges or errors
 	       deriving( Eq, Show )
 	-- Equality for fixpoints
 	-- Show needed for Show in Lex.Token (sigh)
 
 data DmdType = DmdType 
-		    DmdEnv	-- Demand on explicitly-mentioned 
-				--	free variables
-		    [JointDmd]	-- Demand on arguments
-		    DmdResult	-- Nature of result
+		  DmdEnv	-- Demand on explicitly-mentioned 
+		       	        --	free variables
+		  [JointDmd]	-- Demand on arguments
+		  DmdResult	-- Nature of result
+\end{code}
 
+Note [Nature of result demand]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+We assume the result in a demand type to be either a top or bottom
+in order to represent the information about demand on the function
+result, imposed by its definition. There are not so many things we 
+can say, though. 
+
+For instance, one can consider a function
+
+        h = \v -> error "urk"
+
+Taking the definition of strictness, we can easily see that 
+
+        h undefined = undefined
+
+that is, h is strict in v. However, v is not used somehow in the body
+of h How can we know that h is strict in v? In fact, we know it by
+considering a result demand of error and bottom and unleashing it on
+all the variables in scope at a call site (in this case, this is only
+v). We can also consider a case
+
+       h = \v -> f x
+
+where we know that the result of f is not hyper-strict (i.e, it is
+lazy, or top). So, we put the same demand on v, which allow us to
+infer a lazy demand that h puts on v.
+
+
+\begin{code}
 -- Equality needed for fixpoints in DmdAnal
 instance Eq DmdType where
   (==) (DmdType fv1 ds1 res1)
@@ -262,24 +292,15 @@ instance Outputable DmdType where
 
 instance Outputable DmdResult where
   ppr TopRes = empty	  -- Keep these distinct from Demand letters
-  ppr RetCPR = char 'm'	  -- so that we can print strictness sigs as
   ppr BotRes = char 'b'   --    DDDr
 			  -- without ambiguity
--- This guy lets us switch off CPR analysis
--- by making sure that everything uses TopRes instead of RetCPR
--- Assuming, of course, that they don't mention RetCPR by name.
--- They should onlyu use retCPR
-retCPR :: DmdResult
-retCPR | opt_CprOff = TopRes
-       | otherwise  = RetCPR
 
 emptyDmdEnv :: VarEnv JointDmd
 emptyDmdEnv = emptyVarEnv
 
-topDmdType, botDmdType, cprDmdType :: DmdType
+topDmdType, botDmdType :: DmdType
 topDmdType = DmdType emptyDmdEnv [] TopRes
 botDmdType = DmdType emptyDmdEnv [] BotRes
-cprDmdType = DmdType emptyVarEnv [] retCPR
 
 isTopDmdType :: DmdType -> Bool
 -- Only used on top-level types, hence the assert
@@ -295,16 +316,8 @@ resTypeArgDmd :: DmdResult -> JointDmd
 --	BotRes = Bot -> BotRes
 --	TopRes = Top -> TopRes
 -- This function makes that concrete
--- We can get a RetCPR, because of the way in which we are (now)
--- giving CPR info to strict arguments.  On the first pass, when
--- nothing has demand info, we optimistically give CPR info or RetCPR to all args
 resTypeArgDmd TopRes = top
-resTypeArgDmd RetCPR = top
 resTypeArgDmd BotRes = bot
-
-returnsCPR :: DmdResult -> Bool
-returnsCPR RetCPR = True
-returnsCPR _      = False
 
 mkDmdType :: DmdEnv -> [JointDmd] -> DmdResult -> DmdType
 mkDmdType fv ds res = DmdType fv ds res
@@ -318,7 +331,7 @@ dmdTypeDepth (DmdType _ ds _) = length ds
 
 %************************************************************************
 %*									*
-\subsection{Strictness signature}
+\subsection{Demand signature}
 %*									*
 %************************************************************************
 
@@ -369,10 +382,9 @@ increaseStrictSigArity arity_increase (StrictSig (DmdType env dmds res))
 isTopSig :: StrictSig -> Bool
 isTopSig (StrictSig ty) = isTopDmdType ty
 
-topSig, botSig, cprSig :: StrictSig
+topSig, botSig:: StrictSig
 topSig = StrictSig topDmdType
 botSig = StrictSig botDmdType
-cprSig = StrictSig cprDmdType
 	
 -- appIsBottom returns true if an application to n args would diverge
 appIsBottom :: StrictSig -> Int -> Bool
