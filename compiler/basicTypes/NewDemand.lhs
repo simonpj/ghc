@@ -10,7 +10,7 @@ module NewDemand (
         LatticeLike,
         StrDmd(..), strBot, strTop, strStr, strProd,
         AbsDmd(..), absBot, absTop, absProd,
-        JointDmd(..), mkJointDmd,
+        JointDmd(..), mkJointDmd, isTop,
 	DmdType(..), topDmdType, botDmdType, mkDmdType, mkTopDmdType, 
 		dmdTypeDepth, 
 	DmdEnv, emptyDmdEnv,
@@ -18,6 +18,9 @@ module NewDemand (
         appIsBottom, isBottomingSig, pprIfaceStrictSig, 
 	StrictSig(..), mkStrictSig, topSig, botSig,
         isTopSig, 	splitStrictSig, increaseStrictSigArity,
+       
+        seqStrDmd, seqStrDmdList, seqAbsDmd, seqAbsDmdList,
+        seqDemand, seqDemandList, seqDmdType, seqStrictSig, 
      ) where
 
 #include "HsVersions.h"
@@ -129,6 +132,15 @@ instance LatticeLike StrDmd where
            | length sx1 == length sx2      = strProd (d1 `both` d2) $ zipWith both sx1 sx2 
   both _ _                                 = strBot
 
+-- utility functions to deal with memory leaks
+seqStrDmd :: StrDmd -> ()
+seqStrDmd (SProd d ds) = d `seq` seqStrDmdList ds
+seqStrDmd _            = ()
+
+seqStrDmdList :: [StrDmd] -> ()
+seqStrDmdList [] = ()
+seqStrDmdList (d:ds) = seqStrDmd d `seq` seqStrDmdList ds
+
 \end{code}
 
 %************************************************************************
@@ -184,6 +196,15 @@ instance LatticeLike AbsDmd where
 
   both                           = lub
 
+-- utility functions
+seqAbsDmd :: AbsDmd -> ()
+seqAbsDmd (UProd ds) = seqAbsDmdList ds
+seqAbsDmd _          = ()
+
+seqAbsDmdList :: [AbsDmd] -> ()
+seqAbsDmdList [] = ()
+seqAbsDmdList (d:ds) = seqAbsDmd d `seq` seqAbsDmdList ds
+
 \end{code}
   
 %************************************************************************
@@ -217,7 +238,20 @@ instance LatticeLike JointDmd where
 
   lub  (JD s1 a1) (JD s2 a2) = mkJointDmd (lub s1 s2)  $ lub a1 a2            
   both (JD s1 a1) (JD s2 a2) = mkJointDmd (both s1 s2) $ both a1 a2            
-  
+
+
+isTop :: JointDmd -> Bool
+isTop (JD s a) 
+      | s == top && a == top = True
+isTop _                      = False 
+
+-- More utility functions for strictness
+seqDemand :: JointDmd -> ()
+seqDemand (JD x y) = x `seq` y `seq` ()
+
+seqDemandList :: [JointDmd] -> ()
+seqDemandList [] = ()
+seqDemandList (d:ds) = seqDemand d `seq` seqDemandList ds
 \end{code}
 
 %************************************************************************
@@ -245,7 +279,6 @@ data DmdType = DmdType
 
 Note [Nature of result demand]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
 We assume the result in a demand type to be either a top or bottom
 in order to represent the information about demand on the function
 result, imposed by its definition. There are not so many things we 
@@ -326,6 +359,11 @@ mkTopDmdType ds res = DmdType emptyDmdEnv ds res
 
 dmdTypeDepth :: DmdType -> Arity
 dmdTypeDepth (DmdType _ ds _) = length ds
+
+seqDmdType :: DmdType -> ()
+seqDmdType (DmdType _env ds res) = 
+  {- ??? env `seq` -} seqDemandList ds `seq` res `seq` ()
+
 \end{code}
 
 %************************************************************************
@@ -350,14 +388,20 @@ namely
 This DmdType gives the demands unleashed by the Id when it is applied
 to as many arguments as are given in by the arg demands in the DmdType.
 
+If an Id is applied to less arguments than its arity, it means that
+the demand on the function at a call site is weaker than the vanilla
+call demand, used for signature inference. Therefore we place a top
+demand on all arguments. Otherwise, the demand is specified by Id's
+signature.
+
 For example, the demand transformer described by the DmdType
 		DmdType {x -> <S(LL),U(UU)>} [V,A] Top
 says that when the function is applied to two arguments, it
 unleashes demand <S(LL),U(UU)> on the free var x, V on the first arg,
 and A on the second.  
 
-If this same function is applied to one arg, all we can say is
-that it uses x with <L,U(UU)>, and its arg with demand <L,U>.
+If this same function is applied to one arg, all we can say is that it
+uses x with <L,U>, and its arg with demand <L,U>.
 
 \begin{code}
 newtype StrictSig = StrictSig DmdType
@@ -384,6 +428,20 @@ topSig, botSig:: StrictSig
 topSig = StrictSig topDmdType
 botSig = StrictSig botDmdType
 	
+\end{code}
+
+Note [Non-full application] 
+~~~~~~~~~~~~~~~~~~~~~~~~~~~ 
+
+If a function having bottom as its demand result is applied to a less
+number of arguments than its syntactic arity, we cannot say for sure
+that it is going to diverge. This is the reason why we use the
+function appIsBottom, which, given a strictness signature and a number
+of arguments, says conservatively if the function is going to diverge
+or not.
+
+\begin{code}
+
 -- appIsBottom returns true if an application to n args would diverge
 appIsBottom :: StrictSig -> Int -> Bool
 appIsBottom (StrictSig (DmdType _ ds BotRes)) n = not $ lengthExceeds ds n 
@@ -393,8 +451,11 @@ isBottomingSig :: StrictSig -> Bool
 isBottomingSig (StrictSig (DmdType _ _ BotRes)) = True
 isBottomingSig _				= False
 
-pprIfaceStrictSig :: StrictSig -> SDoc
+seqStrictSig :: StrictSig -> ()
+seqStrictSig (StrictSig ty) = seqDmdType ty
+
 -- Used for printing top-level strictness pragmas in interface files
+pprIfaceStrictSig :: StrictSig -> SDoc
 pprIfaceStrictSig (StrictSig (DmdType _ dmds res))
   = hcat (map ppr dmds) <> ppr res
 \end{code}

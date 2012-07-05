@@ -38,6 +38,8 @@ import IfaceType
 import CoreSyn( DFunArg, dfunArgExprs )
 import PprCore()            -- Printing DFunArgs
 import Demand
+-- [newdmd]
+import qualified NewDemand as ND
 import Annotations
 import Class
 import NameSet
@@ -213,11 +215,13 @@ data IfaceIdInfo
 --      and so gives a new version.
 
 data IfaceInfoItem
-  = HsArity      Arity
-  | HsStrictness StrictSig
-  | HsInline     InlinePragma
-  | HsUnfold     Bool             -- True <=> isStrongLoopBreaker is true
-                 IfaceUnfolding   -- See Note [Expose recursive functions]
+  = HsArity         Arity
+  | HsStrictness    StrictSig
+  -- [newdmd]
+  | HsNewStrictness ND.StrictSig
+  | HsInline        InlinePragma
+  | HsUnfold        Bool             -- True <=> isStrongLoopBreaker is true
+                    IfaceUnfolding   -- See Note [Expose recursive functions]
   | HsNoCafRefs
 
 -- NB: Specialisations and rules come in separately and are
@@ -711,13 +715,15 @@ instance Outputable IfaceIdInfo where
                      <+> ptext (sLit "-}")
 
 instance Outputable IfaceInfoItem where
-  ppr (HsUnfold lb unf)  = ptext (sLit "Unfolding")
-                           <> ppWhen lb (ptext (sLit "(loop-breaker)"))
-                           <> colon <+> ppr unf
-  ppr (HsInline prag)    = ptext (sLit "Inline:") <+> ppr prag
-  ppr (HsArity arity)    = ptext (sLit "Arity:") <+> int arity
-  ppr (HsStrictness str) = ptext (sLit "Strictness:") <+> pprIfaceStrictSig str
-  ppr HsNoCafRefs        = ptext (sLit "HasNoCafRefs")
+  ppr (HsUnfold lb unf)     = ptext (sLit "Unfolding")
+                              <> ppWhen lb (ptext (sLit "(loop-breaker)"))
+                              <> colon <+> ppr unf
+  ppr (HsInline prag)       = ptext (sLit "Inline:") <+> ppr prag
+  ppr (HsArity arity)       = ptext (sLit "Arity:") <+> int arity
+  ppr (HsStrictness str)    = ptext (sLit "Strictness:") <+> pprIfaceStrictSig str
+  -- [newdmd]
+  ppr (HsNewStrictness str) = ptext (sLit "NewStrictness:") <+> ND.pprIfaceStrictSig str
+  ppr HsNoCafRefs           = ptext (sLit "HasNoCafRefs")
 
 instance Outputable IfaceUnfolding where
   ppr (IfCompulsory e)     = ptext (sLit "<compulsory>") <+> parens (ppr e)

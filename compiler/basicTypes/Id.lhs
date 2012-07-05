@@ -90,7 +90,13 @@ module Id (
 	setIdUnfolding,
 	setIdArity,
 	setIdDemandInfo, 
-	setIdStrictness, zapIdStrictness,
+	setIdStrictness, 
+
+        -- [newdmd]
+	setNewIdDemandInfo, 
+	setNewIdStrictness, 
+
+        zapIdStrictness,
 	setIdSpecialisation,
 	setIdCafInfo,
 	setIdOccInfo, zapIdOccInfo,
@@ -115,6 +121,7 @@ import Type
 import TysPrim
 import DataCon
 import Demand
+import qualified NewDemand as ND
 import Name
 import Module
 import Class
@@ -136,6 +143,11 @@ infixl 	1 `setIdUnfoldingLazily`,
 	  `setIdOccInfo`,
 	  `setIdDemandInfo`,
 	  `setIdStrictness`,
+
+          -- [newdmd]
+	  `setNewIdDemandInfo`,
+	  `setNewIdStrictness`,
+
 	  `setIdSpecialisation`,
 	  `setInlinePragma`,
 	  `setInlineActivation`,
@@ -480,6 +492,10 @@ idStrictness       id = idStrictness_maybe id `orElse` topSig
 setIdStrictness :: Id -> StrictSig -> Id
 setIdStrictness id sig = modifyIdInfo (`setStrictnessInfo` Just sig) id
 
+-- [newdmd]
+setNewIdStrictness :: Id -> ND.StrictSig -> Id
+setNewIdStrictness id sig = modifyIdInfo (`setNewStrictnessInfo` Just sig) id
+
 zapIdStrictness :: Id -> Id
 zapIdStrictness id = modifyIdInfo (`setStrictnessInfo` Nothing) id
 
@@ -523,6 +539,10 @@ idDemandInfo       id = demandInfo (idInfo id) `orElse` topDmd
 
 setIdDemandInfo :: Id -> Demand -> Id
 setIdDemandInfo id dmd = modifyIdInfo (`setDemandInfo` Just dmd) id
+
+-- [newdmd]
+setNewIdDemandInfo :: Id -> ND.JointDmd -> Id
+setNewIdDemandInfo id dmd = modifyIdInfo (`setNewDemandInfo` Just dmd) id
 
 	---------------------------------
 	-- SPECIALISATION

@@ -26,6 +26,8 @@ module IdInfo (
 
 	-- ** Zapping various forms of Info
 	zapLamInfo, zapDemandInfo, zapFragileInfo,
+        -- [newdmd]
+        zapNewDemandInfo,
 
 	-- ** The ArityInfo type
 	ArityInfo,
@@ -35,6 +37,11 @@ module IdInfo (
 	-- ** Demand and strictness Info
  	strictnessInfo, setStrictnessInfo, 
   	demandInfo, setDemandInfo, pprStrictness,
+
+	-- ** New demand and strictness Info
+        -- [newdmd]
+ 	newStrictnessInfo, setNewStrictnessInfo, 
+  	newDemandInfo, setNewDemandInfo, pprNewStrictness,
 
 	-- ** Unfolding Info
 	unfoldingInfo, setUnfoldingInfo, setUnfoldingInfoLazily,
@@ -83,6 +90,8 @@ import DataCon
 import TyCon
 import ForeignCall
 import Demand
+-- [newdmd]
+import qualified NewDemand as ND
 import Outputable	
 import Module
 import FastString
@@ -98,7 +107,10 @@ infixl 	1 `setSpecInfo`,
 	  `setOccInfo`,
 	  `setCafInfo`,
 	  `setStrictnessInfo`,
-	  `setDemandInfo`
+	  `setDemandInfo`,
+          -- [newdmd]
+	  `setNewStrictnessInfo`,
+	  `setNewDemandInfo`
 \end{code}
 
 %************************************************************************
@@ -203,14 +215,22 @@ data IdInfo
 	inlinePragInfo	:: InlinePragma,	-- ^ Any inline pragma atached to the 'Id'
 	occInfo		:: OccInfo,		-- ^ How the 'Id' occurs in the program
 
-	strictnessInfo :: Maybe StrictSig,	-- ^ Id strictness information. Reason for Maybe: 
+	strictnessInfo  :: Maybe StrictSig,	-- ^ Id strictness information. Reason for Maybe: 
 	                                        -- the DmdAnal phase needs to know whether
 						-- this is the first visit, so it can assign botSig.
 						-- Other customers want topSig.  So @Nothing@ is good.
 
-	demandInfo	  :: Maybe Demand	-- ^ Id demand information. Similarly we want to know 
+	demandInfo	:: Maybe Demand,        -- ^ Id demand information. Similarly we want to know 
 	                                        -- if there's no known demand yet, for when we are looking
 						-- for CPR info
+        
+        -- [newdmd]
+        newStrictnessInfo :: Maybe ND.StrictSig,  -- ^ New strictness signature, the details above are 
+                                                  -- appliccable   
+
+        -- [newdmd]
+        newDemandInfo   :: Maybe ND.JointDmd     -- ^ New ID demand information
+
     }
 
 -- | Just evaluate the 'IdInfo' to WHNF
@@ -227,8 +247,12 @@ megaSeqIdInfo info
 -- some unfoldings are not calculated at all
 --    seqUnfolding (unfoldingInfo info)		`seq`
 
-    seqDemandInfo (demandInfo info)	`seq`
+    seqDemandInfo (demandInfo info)	    `seq`
     seqStrictnessInfo (strictnessInfo info) `seq`
+
+    -- [newdmd]
+    seqNewDemandInfo (newDemandInfo info)         `seq`
+    seqNewStrictnessInfo (newStrictnessInfo info) `seq`
 
     seqCaf (cafInfo info)			`seq`
     seqLBVar (lbvarInfo info)			`seq`
@@ -241,6 +265,16 @@ seqStrictnessInfo (Just ty) = seqStrictSig ty
 seqDemandInfo :: Maybe Demand -> ()
 seqDemandInfo Nothing    = ()
 seqDemandInfo (Just dmd) = seqDemand dmd
+
+-- [newdmd]
+seqNewStrictnessInfo :: Maybe ND.StrictSig -> ()
+seqNewStrictnessInfo Nothing = ()
+seqNewStrictnessInfo (Just ty) = ND.seqStrictSig ty
+
+-- [newdmd]
+seqNewDemandInfo :: Maybe ND.JointDmd -> ()
+seqNewDemandInfo Nothing    = ()
+seqNewDemandInfo (Just dmd) = ND.seqDemand dmd
 \end{code}
 
 Setters
@@ -280,6 +314,14 @@ setDemandInfo     info dd = dd `seq` info { demandInfo = dd }
 
 setStrictnessInfo :: IdInfo -> Maybe StrictSig -> IdInfo
 setStrictnessInfo info dd = dd `seq` info { strictnessInfo = dd }
+
+-- [newdmd]
+setNewDemandInfo :: IdInfo -> Maybe ND.JointDmd -> IdInfo
+setNewDemandInfo info dd = dd `seq` info { newDemandInfo = dd }
+
+-- [newdmd]
+setNewStrictnessInfo :: IdInfo -> Maybe ND.StrictSig -> IdInfo
+setNewStrictnessInfo info dd = dd `seq` info { newStrictnessInfo = dd }
 \end{code}
 
 
@@ -295,8 +337,11 @@ vanillaIdInfo
 	    lbvarInfo		= NoLBVarInfo,
 	    inlinePragInfo 	= defaultInlinePragma,
 	    occInfo		= NoOccInfo,
-	    demandInfo	= Nothing,
-	    strictnessInfo   = Nothing
+	    demandInfo	        = Nothing,
+	    strictnessInfo      = Nothing,
+	    -- [newdmd]
+            newDemandInfo	= Nothing,
+	    newStrictnessInfo   = Nothing
 	   }
 
 -- | More informative 'IdInfo' we can use when we know the 'Id' has no CAF references
@@ -366,6 +411,11 @@ type InlinePragInfo = InlinePragma
 pprStrictness :: Maybe StrictSig -> SDoc
 pprStrictness Nothing    = empty
 pprStrictness (Just sig) = ppr sig
+
+-- [newdmd]
+pprNewStrictness :: Maybe ND.StrictSig -> SDoc
+pprNewStrictness Nothing    = empty
+pprNewStrictness (Just sig) = ppr sig
 \end{code}
 
 
@@ -544,6 +594,12 @@ zapLamInfo info@(IdInfo {occInfo = occ, demandInfo = demand})
 zapDemandInfo :: IdInfo -> Maybe IdInfo
 zapDemandInfo info@(IdInfo {demandInfo = dmd})
   | isJust dmd = Just (info {demandInfo = Nothing})
+  | otherwise  = Nothing
+
+-- [newdmd]
+zapNewDemandInfo :: IdInfo -> Maybe IdInfo
+zapNewDemandInfo info@(IdInfo {newDemandInfo = dmd})
+  | isJust dmd = Just (info {newDemandInfo = Nothing})
   | otherwise  = Nothing
 \end{code}
 

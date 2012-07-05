@@ -1208,11 +1208,13 @@ instance Binary IfaceIdInfo where
             _ -> lazyGet bh >>= (return . HasInfo)     -- NB lazyGet
 
 instance Binary IfaceInfoItem where
-    put_ bh (HsArity aa)      = putByte bh 0 >> put_ bh aa
-    put_ bh (HsStrictness ab) = putByte bh 1 >> put_ bh ab
-    put_ bh (HsUnfold lb ad)  = putByte bh 2 >> put_ bh lb >> put_ bh ad
-    put_ bh (HsInline ad)     = putByte bh 3 >> put_ bh ad
-    put_ bh HsNoCafRefs       = putByte bh 4
+    put_ bh (HsArity aa)         = putByte bh 0 >> put_ bh aa
+    put_ bh (HsStrictness ab)    = putByte bh 1 >> put_ bh ab
+    put_ bh (HsUnfold lb ad)     = putByte bh 2 >> put_ bh lb >> put_ bh ad
+    put_ bh (HsInline ad)        = putByte bh 3 >> put_ bh ad
+    put_ bh HsNoCafRefs          = putByte bh 4
+    -- [newdmd]
+    put_ bh (HsNewStrictness _) = putByte bh 5
     get bh = do
         h <- getByte bh
         case h of
