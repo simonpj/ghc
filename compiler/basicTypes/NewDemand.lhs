@@ -220,7 +220,6 @@ instance LatticeLike JointDmd where
   
 \end{code}
 
-
 %************************************************************************
 %*									*
 \subsection{Demand environments, types and results}
@@ -313,8 +312,8 @@ isBotRes _      = False
 
 resTypeArgDmd :: DmdResult -> JointDmd
 -- TopRes and BotRes are polymorphic, so that
---	BotRes = Bot -> BotRes
---	TopRes = Top -> TopRes
+--	BotRes === Bot -> BotRes === ...
+--	TopRes === Top -> TopRes === ...
 -- This function makes that concrete
 resTypeArgDmd TopRes = top
 resTypeArgDmd BotRes = bot
@@ -357,9 +356,8 @@ says that when the function is applied to two arguments, it
 unleashes demand <S(LL),U(UU)> on the free var x, V on the first arg,
 and A on the second.  
 
-[??? -- clarify this]
 If this same function is applied to one arg, all we can say is
-that it uses x with U*(LL), and its arg with demand <L,U>.
+that it uses x with <L,U(UU)>, and its arg with demand <L,U>.
 
 \begin{code}
 newtype StrictSig = StrictSig DmdType
