@@ -26,6 +26,7 @@ import TysPrim
 import TysWiredIn
 
 import Demand
+import qualified NewDemand as ND
 import Var              ( TyVar )
 import OccName          ( OccName, pprOccName, mkVarOccFS )
 import TyCon            ( TyCon, isPrimTyCon, tyConPrimRep, PrimRep(..) )
@@ -149,6 +150,14 @@ primOpStrictness :: PrimOp -> Arity -> StrictSig
         -- The arity should be the arity of the primop; that's why
         -- this function isn't exported.
 #include "primop-strictness.hs-incl"
+
+nd_primOpStrictness :: PrimOp -> Arity -> ND.StrictSig
+nd_primOpStrictness RaiseOp _ = ND.mkStrictSig (ND.mkTopDmdType [ND.top] ND.botRes) 
+nd_primOpStrictness RaiseIOOp _ = ND.mkStrictSig (ND.mkTopDmdType [ND.top, ND.top] ND.botRes) 
+nd_primOpStrictness DataToTagOp _ = ND.mkStrictSig (ND.mkTopDmdType [ND.strictlyUsedDmd] ND.topRes) 
+nd_primOpStrictness _ arity = ND.mkStrictSig (ND.mkTopDmdType (replicate arity ND.top) ND.topRes) 
+
+
 \end{code}
 
 %************************************************************************
@@ -495,9 +504,9 @@ primOpOcc op = case primOpInfo op of
 -- (type variables, argument types, result type)
 -- It also gives arity, strictness info
 
-primOpSig :: PrimOp -> ([TyVar], [Type], Type, Arity, StrictSig)
+primOpSig :: PrimOp -> ([TyVar], [Type], Type, Arity, StrictSig, ND.StrictSig)
 primOpSig op
-  = (tyvars, arg_tys, res_ty, arity, primOpStrictness op arity)
+  = (tyvars, arg_tys, res_ty, arity, primOpStrictness op arity, nd_primOpStrictness op arity)
   where
     arity = length arg_tys
     (tyvars, arg_tys, res_ty)

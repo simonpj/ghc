@@ -19,7 +19,6 @@ import Var
 import Id
 import IdInfo
 import Demand
--- [newdmd]
 import qualified NewDemand as ND
 import DataCon
 import TyCon
@@ -322,23 +321,23 @@ pprIdBndrInfo info
     prag_info = inlinePragInfo info
     occ_info  = occInfo info
     dmd_info  = demandInfo info
-    -- [newdmd]
-    new_dmd_info  = newDemandInfo info
+
+    nd_dmd_info  = nd_demandInfo info
+
     lbv_info  = lbvarInfo info
 
     has_prag = not (isDefaultInlinePragma prag_info)
     has_occ  = not (isNoOcc occ_info)
     has_dmd  = case dmd_info of { Nothing -> False; Just d -> not (isTop d) }
-    -- [newdmd]
-    has_new_dmd  = case new_dmd_info of { Nothing -> False; Just d -> not (ND.isTop d) }
+
+    nd_has_dmd  = case nd_dmd_info of { Nothing -> False; Just d -> not (ND.isTop d) }
     has_lbv  = not (hasNoLBVarInfo lbv_info)
 
     doc = showAttributes
           [ (has_prag, ptext (sLit "InlPrag=") <> ppr prag_info)
           , (has_occ,  ptext (sLit "Occ=") <> ppr occ_info)
           , (has_dmd,  ptext (sLit "Dmd=") <> ppr dmd_info)
-          -- [newdmd]
-          , (has_new_dmd,  ptext (sLit "NewDmd=") <> ppr new_dmd_info)
+          , (nd_has_dmd,  ptext (sLit "NewDmd=") <> ppr nd_dmd_info)
           , (has_lbv , ptext (sLit "Lbv=") <> ppr lbv_info)
           ]
 \end{code}
@@ -358,8 +357,8 @@ ppIdInfo id info
     , (has_arity,      ptext (sLit "Arity=") <> int arity)
     , (has_caf_info,   ptext (sLit "Caf=") <> ppr caf_info)
     , (has_strictness, ptext (sLit "Str=") <> pprStrictness str_info)
-    -- [newdmd]
-    , (has_new_strictness, ptext (sLit "NewStr=") <> pprStrictness new_str_info)
+
+    , (nd_has_strictness, ptext (sLit "NewStr=") <> nd_pprStrictness nd_str_info)
     , (has_unf,        ptext (sLit "Unf=") <> ppr unf_info)
     , (not (null rules), ptext (sLit "RULES:") <+> vcat (map pprRule rules))
     ]   -- Inline pragma, occ, demand, lbvar info
@@ -379,9 +378,8 @@ ppIdInfo id info
     str_info = strictnessInfo info
     has_strictness = isJust str_info
 
-    -- [newdmd]
-    new_str_info = strictnessInfo info
-    has_new_strictness = isJust str_info
+    nd_str_info = nd_strictnessInfo info
+    nd_has_strictness = isJust str_info
 
     unf_info = unfoldingInfo info
     has_unf = hasSomeUnfolding unf_info

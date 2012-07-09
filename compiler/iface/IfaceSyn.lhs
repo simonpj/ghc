@@ -38,7 +38,6 @@ import IfaceType
 import CoreSyn( DFunArg, dfunArgExprs )
 import PprCore()            -- Printing DFunArgs
 import Demand
--- [newdmd]
 import qualified NewDemand as ND
 import Annotations
 import Class
@@ -217,8 +216,7 @@ data IfaceIdInfo
 data IfaceInfoItem
   = HsArity         Arity
   | HsStrictness    StrictSig
-  -- [newdmd]
-  | HsNewStrictness ND.StrictSig
+  | ND_HsStrictness ND.StrictSig
   | HsInline        InlinePragma
   | HsUnfold        Bool             -- True <=> isStrongLoopBreaker is true
                     IfaceUnfolding   -- See Note [Expose recursive functions]
@@ -721,8 +719,7 @@ instance Outputable IfaceInfoItem where
   ppr (HsInline prag)       = ptext (sLit "Inline:") <+> ppr prag
   ppr (HsArity arity)       = ptext (sLit "Arity:") <+> int arity
   ppr (HsStrictness str)    = ptext (sLit "Strictness:") <+> pprIfaceStrictSig str
-  -- [newdmd]
-  ppr (HsNewStrictness str) = ptext (sLit "NewStrictness:") <+> ND.pprIfaceStrictSig str
+  ppr (ND_HsStrictness str) = ptext (sLit "NewStrictness:") <+> ND.pprIfaceStrictSig str
   ppr HsNoCafRefs           = ptext (sLit "HasNoCafRefs")
 
 instance Outputable IfaceUnfolding where

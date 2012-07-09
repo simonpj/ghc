@@ -92,14 +92,18 @@ module Id (
 	setIdDemandInfo, 
 	setIdStrictness, 
 
-        -- [newdmd]
-	setNewIdDemandInfo, 
-	setNewIdStrictness, 
-
         zapIdStrictness,
 	setIdSpecialisation,
 	setIdCafInfo,
 	setIdOccInfo, zapIdOccInfo,
+
+	nd_setIdDemandInfo, 
+	nd_setIdStrictness, 
+
+	nd_idDemandInfo, nd_idDemandInfo_maybe,
+	nd_idStrictness, nd_idStrictness_maybe, 
+
+        nd_zapDemandIdInfo, nd_zapIdStrictness,
 
     ) where
 
@@ -144,14 +148,13 @@ infixl 	1 `setIdUnfoldingLazily`,
 	  `setIdDemandInfo`,
 	  `setIdStrictness`,
 
-          -- [newdmd]
-	  `setNewIdDemandInfo`,
-	  `setNewIdStrictness`,
-
 	  `setIdSpecialisation`,
 	  `setInlinePragma`,
 	  `setInlineActivation`,
-	  `idCafInfo`
+	  `idCafInfo`,
+
+	  `nd_setIdDemandInfo`,
+	  `nd_setIdStrictness`
 \end{code}
 
 %************************************************************************
@@ -492,12 +495,20 @@ idStrictness       id = idStrictness_maybe id `orElse` topSig
 setIdStrictness :: Id -> StrictSig -> Id
 setIdStrictness id sig = modifyIdInfo (`setStrictnessInfo` Just sig) id
 
--- [newdmd]
-setNewIdStrictness :: Id -> ND.StrictSig -> Id
-setNewIdStrictness id sig = modifyIdInfo (`setNewStrictnessInfo` Just sig) id
-
 zapIdStrictness :: Id -> Id
 zapIdStrictness id = modifyIdInfo (`setStrictnessInfo` Nothing) id
+
+nd_idStrictness_maybe :: Id -> Maybe ND.StrictSig
+nd_idStrictness :: Id -> ND.StrictSig
+
+nd_idStrictness_maybe id = nd_strictnessInfo (idInfo id)
+nd_idStrictness       id = nd_idStrictness_maybe id `orElse` ND.topSig
+
+nd_setIdStrictness :: Id -> ND.StrictSig -> Id
+nd_setIdStrictness id sig = modifyIdInfo (`nd_setStrictnessInfo` Just sig) id
+
+nd_zapIdStrictness :: Id -> Id
+nd_zapIdStrictness id = modifyIdInfo (`nd_setStrictnessInfo` Nothing) id
 
 -- | This predicate says whether the 'Id' has a strict demand placed on it or
 -- has a type such that it can always be evaluated strictly (e.g., an
@@ -531,18 +542,23 @@ setIdUnfoldingLazily id unfolding = modifyIdInfo (`setUnfoldingInfoLazily` unfol
 setIdUnfolding :: Id -> Unfolding -> Id
 setIdUnfolding id unfolding = modifyIdInfo (`setUnfoldingInfo` unfolding) id
 
+setIdDemandInfo :: Id -> Demand -> Id
+setIdDemandInfo id dmd = modifyIdInfo (`setDemandInfo` Just dmd) id
+
 idDemandInfo_maybe :: Id -> Maybe Demand
 idDemandInfo       :: Id -> Demand
 
 idDemandInfo_maybe id = demandInfo (idInfo id)
 idDemandInfo       id = demandInfo (idInfo id) `orElse` topDmd
 
-setIdDemandInfo :: Id -> Demand -> Id
-setIdDemandInfo id dmd = modifyIdInfo (`setDemandInfo` Just dmd) id
+nd_idDemandInfo_maybe :: Id -> Maybe ND.Demand
+nd_idDemandInfo       :: Id -> ND.Demand
 
--- [newdmd]
-setNewIdDemandInfo :: Id -> ND.JointDmd -> Id
-setNewIdDemandInfo id dmd = modifyIdInfo (`setNewDemandInfo` Just dmd) id
+nd_idDemandInfo_maybe id = nd_demandInfo (idInfo id)
+nd_idDemandInfo       id = nd_idDemandInfo_maybe id `orElse` ND.top
+
+nd_setIdDemandInfo :: Id -> ND.Demand -> Id
+nd_setIdDemandInfo id dmd = modifyIdInfo (`nd_setDemandInfo` Just dmd) id
 
 	---------------------------------
 	-- SPECIALISATION
@@ -686,6 +702,9 @@ zapDemandIdInfo = zapInfo zapDemandInfo
 
 zapFragileIdInfo :: Id -> Id
 zapFragileIdInfo = zapInfo zapFragileInfo 
+
+nd_zapDemandIdInfo :: Id -> Id
+nd_zapDemandIdInfo = zapInfo nd_zapDemandInfo
 \end{code}
 
 Note [transferPolyIdInfo]
@@ -755,8 +774,12 @@ transferPolyIdInfo old_id abstract_wrt new_id
     old_strictness  = strictnessInfo old_info
     new_strictness  = fmap (increaseStrictSigArity arity_increase) old_strictness
 
+    nd_old_strictness  = nd_strictnessInfo old_info
+    nd_new_strictness  = fmap (ND.increaseStrictSigArity arity_increase) nd_old_strictness
+
     transfer new_info = new_info `setStrictnessInfo` new_strictness
 			         `setArityInfo` new_arity
  			         `setInlinePragInfo` old_inline_prag
 				 `setOccInfo` old_occ_info
+                                 `nd_setStrictnessInfo` nd_new_strictness
 \end{code}

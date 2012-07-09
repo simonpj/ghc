@@ -7,20 +7,21 @@
 \begin{code}
 
 module NewDemand (
-        LatticeLike,
+        LatticeLike, top, bot, lub, both, pre,
         StrDmd(..), strBot, strTop, strStr, strProd,
         AbsDmd(..), absBot, absTop, absProd,
-        JointDmd(..), mkJointDmd, isTop,
+        Demand, JointDmd(..), mkJointDmd, isTop,
 	DmdType(..), topDmdType, botDmdType, mkDmdType, mkTopDmdType, 
 		dmdTypeDepth, 
 	DmdEnv, emptyDmdEnv,
-	DmdResult(..), isBotRes, resTypeArgDmd,
+	DmdResult(..), isBotRes, resTypeArgDmd, topRes, botRes,
         appIsBottom, isBottomingSig, pprIfaceStrictSig, 
 	StrictSig(..), mkStrictSig, topSig, botSig,
         isTopSig, 	splitStrictSig, increaseStrictSigArity,
        
         seqStrDmd, seqStrDmdList, seqAbsDmd, seqAbsDmdList,
         seqDemand, seqDemandList, seqDmdType, seqStrictSig, 
+        strictlyUsedDmd,
      ) where
 
 #include "HsVersions.h"
@@ -31,6 +32,7 @@ import VarEnv
 import UniqFM
 import Util
 import BasicTypes
+import Binary
 
 \end{code}
 
@@ -93,7 +95,7 @@ strProd def sx
            else SProd def sx
 
 
--- Serialization
+-- Pretty-printing
 instance Outputable StrDmd where
   ppr HyperStr      = char 'B'
   ppr Lazy          = char 'L'
@@ -141,6 +143,24 @@ seqStrDmdList :: [StrDmd] -> ()
 seqStrDmdList [] = ()
 seqStrDmdList (d:ds) = seqStrDmd d `seq` seqStrDmdList ds
 
+-- Serialization
+instance Binary StrDmd where
+  put_ bh HyperStr     = do putByte bh 0
+  put_ bh Lazy         = do putByte bh 1
+  put_ bh Str          = do putByte bh 2
+  put_ bh (SProd d sx) = do putByte bh 3
+                            put_ bh d
+                            put_ bh sx  
+  get bh = do 
+         h <- getByte bh
+         case h of
+           0 -> do return strBot
+           1 -> do return strTop
+           2 -> do return strStr
+           _ -> do d  <- get bh
+                   sx <- get bh
+                   return $ strProd d sx
+
 \end{code}
 
 %************************************************************************
@@ -158,12 +178,11 @@ data AbsDmd
   deriving ( Eq, Show )
 
 
--- Serialization
+-- Pretty-printing
 instance Outputable AbsDmd where
   ppr Abs         = char 'A'
   ppr Used        = char 'U'
   ppr (UProd as)  = (char 'U') <> parens (hcat (map ppr as))
-
 
 -- Well-formedness preserving constructors for the Absence domain
 absBot, absTop :: AbsDmd
@@ -205,6 +224,23 @@ seqAbsDmdList :: [AbsDmd] -> ()
 seqAbsDmdList [] = ()
 seqAbsDmdList (d:ds) = seqAbsDmd d `seq` seqAbsDmdList ds
 
+-- Serialization
+instance Binary AbsDmd where
+    put_ bh Abs         = do 
+            putByte bh 0
+    put_ bh Used        = do 
+            putByte bh 1
+    put_ bh (UProd ux) = do
+            putByte bh 2
+            put_ bh ux
+
+    get  bh = do
+            h <- getByte bh
+            case h of 
+              0 -> return absBot       
+              1 -> return absTop
+              _ -> do ux <- get bh
+                      return $ absProd ux
 \end{code}
   
 %************************************************************************
@@ -218,6 +254,7 @@ seqAbsDmdList (d:ds) = seqAbsDmd d `seq` seqAbsDmdList ds
 data JointDmd = JD { str :: StrDmd, abs :: AbsDmd } 
   deriving ( Eq, Show )
 
+-- Pretty-printing
 instance Outputable JointDmd where
   ppr (JD s a) = angleBrackets (ppr s <> char ',' <> ppr a)
 
@@ -239,6 +276,8 @@ instance LatticeLike JointDmd where
   lub  (JD s1 a1) (JD s2 a2) = mkJointDmd (lub s1 s2)  $ lub a1 a2            
   both (JD s1 a1) (JD s2 a2) = mkJointDmd (both s1 s2) $ both a1 a2            
 
+strictlyUsedDmd :: JointDmd
+strictlyUsedDmd = mkJointDmd strStr absTop
 
 isTop :: JointDmd -> Bool
 isTop (JD s a) 
@@ -252,6 +291,14 @@ seqDemand (JD x y) = x `seq` y `seq` ()
 seqDemandList :: [JointDmd] -> ()
 seqDemandList [] = ()
 seqDemandList (d:ds) = seqDemand d `seq` seqDemandList ds
+
+-- Serialization
+instance Binary JointDmd where
+    put_ bh (JD x y) = do put_ bh x; put_ bh y
+    get  bh = do 
+              x <- get bh
+              y <- get bh
+              return $ mkJointDmd x y
 \end{code}
 
 %************************************************************************
@@ -262,7 +309,9 @@ seqDemandList (d:ds) = seqDemand d `seq` seqDemandList ds
 
 \begin{code}
 
-type DmdEnv = VarEnv JointDmd
+type Demand = JointDmd
+
+type DmdEnv = VarEnv Demand
 
 data DmdResult = TopRes	-- Nothing known, assumed to be just lazy	
 	       | BotRes	-- Diverges or errors
@@ -270,10 +319,14 @@ data DmdResult = TopRes	-- Nothing known, assumed to be just lazy
 	-- Equality for fixpoints
 	-- Show needed for Show in Lex.Token (sigh)
 
+topRes, botRes :: DmdResult
+topRes = TopRes
+botRes = BotRes
+
 data DmdType = DmdType 
 		  DmdEnv	-- Demand on explicitly-mentioned 
 		       	        --	free variables
-		  [JointDmd]	-- Demand on arguments
+		  [Demand]	-- Demand on arguments
 		  DmdResult	-- Nature of result
 \end{code}
 
@@ -322,17 +375,36 @@ instance Outputable DmdType where
       pp_elt (uniq, dmd) = ppr uniq <> text "->" <> ppr dmd
       fv_elts = ufmToList fv
 
+instance Binary DmdType where
+  -- Ignore DmdEnv when spitting out the DmdType
+  put_ bh (DmdType _ ds dr) 
+       = do put_ bh ds 
+            put_ bh dr
+  get bh 
+      = do ds <- get bh 
+           dr <- get bh 
+           return (DmdType emptyDmdEnv ds dr)
+
 instance Outputable DmdResult where
   ppr TopRes = empty	  -- Keep these distinct from Demand letters
-  ppr BotRes = char 'b'   --    DDDr
-			  -- without ambiguity
+  ppr BotRes = char 'b'   --    DDDr without ambiguity
 
-emptyDmdEnv :: VarEnv JointDmd
+
+instance Binary DmdResult where
+    put_ bh TopRes = do putByte bh 0
+    put_ bh BotRes = do putByte bh 1
+    get bh = do
+            h <- getByte bh
+            case h of
+              0 -> do return TopRes
+              _ -> do return BotRes
+
+emptyDmdEnv :: VarEnv Demand
 emptyDmdEnv = emptyVarEnv
 
 topDmdType, botDmdType :: DmdType
-topDmdType = DmdType emptyDmdEnv [] TopRes
-botDmdType = DmdType emptyDmdEnv [] BotRes
+topDmdType = DmdType emptyDmdEnv [] topRes
+botDmdType = DmdType emptyDmdEnv [] botRes
 
 isTopDmdType :: DmdType -> Bool
 -- Only used on top-level types, hence the assert
@@ -343,7 +415,7 @@ isBotRes :: DmdResult -> Bool
 isBotRes BotRes = True
 isBotRes _      = False
 
-resTypeArgDmd :: DmdResult -> JointDmd
+resTypeArgDmd :: DmdResult -> Demand
 -- TopRes and BotRes are polymorphic, so that
 --	BotRes === Bot -> BotRes === ...
 --	TopRes === Top -> TopRes === ...
@@ -351,10 +423,10 @@ resTypeArgDmd :: DmdResult -> JointDmd
 resTypeArgDmd TopRes = top
 resTypeArgDmd BotRes = bot
 
-mkDmdType :: DmdEnv -> [JointDmd] -> DmdResult -> DmdType
+mkDmdType :: DmdEnv -> [Demand] -> DmdResult -> DmdType
 mkDmdType fv ds res = DmdType fv ds res
 
-mkTopDmdType :: [JointDmd] -> DmdResult -> DmdType
+mkTopDmdType :: [Demand] -> DmdResult -> DmdType
 mkTopDmdType ds res = DmdType emptyDmdEnv ds res
 
 dmdTypeDepth :: DmdType -> Arity
@@ -413,7 +485,7 @@ instance Outputable StrictSig where
 mkStrictSig :: DmdType -> StrictSig
 mkStrictSig dmd_ty = StrictSig dmd_ty
 
-splitStrictSig :: StrictSig -> ([JointDmd], DmdResult)
+splitStrictSig :: StrictSig -> ([Demand], DmdResult)
 splitStrictSig (StrictSig (DmdType _ dmds res)) = (dmds, res)
 
 increaseStrictSigArity :: Int -> StrictSig -> StrictSig
@@ -427,6 +499,14 @@ isTopSig (StrictSig ty) = isTopDmdType ty
 topSig, botSig:: StrictSig
 topSig = StrictSig topDmdType
 botSig = StrictSig botDmdType
+
+-- Serialization
+instance Binary StrictSig where
+    put_ bh (StrictSig aa) = do
+            put_ bh aa
+    get bh = do
+          aa <- get bh
+          return (StrictSig aa)
 	
 \end{code}
 

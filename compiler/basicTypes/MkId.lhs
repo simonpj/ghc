@@ -63,6 +63,7 @@ import Id
 import Var              ( mkExportedLocalVar )
 import IdInfo
 import Demand
+import qualified NewDemand as ND
 import CoreSyn
 import Unique
 import PrelNames
@@ -249,11 +250,13 @@ mkDataConIds wrap_name wkr_name data_con
     wkr_arity = dataConRepArity data_con
     wkr_info  = noCafIdInfo
                 `setArityInfo`       wkr_arity
-                `setStrictnessInfo`  Just wkr_sig
+                `setStrictnessInfo`     Just wkr_sig
+                `nd_setStrictnessInfo`  Just nd_wkr_sig
                 `setUnfoldingInfo`   evaldUnfolding  -- Record that it's evaluated,
                                                         -- even if arity = 0
 
     wkr_sig = mkStrictSig (mkTopDmdType (replicate wkr_arity topDmd) cpr_info)
+    nd_wkr_sig = ND.mkStrictSig (ND.mkTopDmdType (replicate wkr_arity ND.top) ND.topRes)
         --      Note [Data-con worker strictness]
         -- Notice that we do *not* say the worker is strict
         -- even if the data constructor is declared strict
@@ -476,7 +479,10 @@ mkDictSelId no_unf name clas
         -- where the V depends on which item we are selecting
         -- It's worth giving one, so that absence info etc is generated
         -- even if the selector isn't inlined
+
+    -- [newdmd] -- which demand 
     strict_sig = mkStrictSig (mkTopDmdType [arg_dmd] TopRes)
+    
     arg_dmd | new_tycon = evalDmd
             | otherwise = Eval (Prod [ if the_arg_id == id then evalDmd else Abs
                                      | id <- arg_ids ])
@@ -741,7 +747,7 @@ mkPrimOpId :: PrimOp -> Id
 mkPrimOpId prim_op 
   = id
   where
-    (tyvars,arg_tys,res_ty, arity, strict_sig) = primOpSig prim_op
+    (tyvars,arg_tys,res_ty, arity, strict_sig, nd_strict_sig) = primOpSig prim_op
     ty   = mkForAllTys tyvars (mkFunTys arg_tys res_ty)
     name = mkWiredInName gHC_PRIM (primOpOcc prim_op) 
                          (mkPrimOpIdUnique (primOpTag prim_op))
@@ -751,7 +757,8 @@ mkPrimOpId prim_op
     info = noCafIdInfo
            `setSpecInfo`          mkSpecInfo (primOpRules prim_op name)
            `setArityInfo`         arity
-           `setStrictnessInfo` Just strict_sig
+           `setStrictnessInfo`    Just strict_sig
+           `nd_setStrictnessInfo` Just nd_strict_sig
 
 -- For each ccall we manufacture a separate CCallOpId, giving it
 -- a fresh unique, a type that is correct for this particular ccall,
@@ -777,12 +784,14 @@ mkFCallId dflags uniq fcall ty
 
     info = noCafIdInfo
            `setArityInfo`         arity
-           `setStrictnessInfo` Just strict_sig
+           `setStrictnessInfo`    Just strict_sig
+           `nd_setStrictnessInfo` Just nd_strict_sig
 
-    (_, tau)     = tcSplitForAllTys ty
-    (arg_tys, _) = tcSplitFunTys tau
-    arity        = length arg_tys
-    strict_sig   = mkStrictSig (mkTopDmdType (replicate arity evalDmd) TopRes)
+    (_, tau)        = tcSplitForAllTys ty
+    (arg_tys, _)    = tcSplitFunTys tau
+    arity           = length arg_tys
+    strict_sig      = mkStrictSig (mkTopDmdType (replicate arity evalDmd) TopRes)
+    nd_strict_sig   = ND.mkStrictSig (ND.mkTopDmdType (replicate arity ND.strictlyUsedDmd) ND.topRes)
 \end{code}
 
 
