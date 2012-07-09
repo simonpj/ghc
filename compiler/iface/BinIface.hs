@@ -1211,8 +1211,8 @@ instance Binary IfaceInfoItem where
     put_ bh (HsStrictness ab)     = putByte bh 1 >> put_ bh ab
     put_ bh (HsUnfold lb ad)      = putByte bh 2 >> put_ bh lb >> put_ bh ad
     put_ bh (HsInline ad)         = putByte bh 3 >> put_ bh ad
-    put_ bh (ND_HsStrictness ab)  = putByte bh 4 >> put_ bh ab
-    put_ bh HsNoCafRefs           = putByte bh 5
+    put_ bh HsNoCafRefs           = putByte bh 4
+    put_ bh (ND_HsStrictness ab)  = putByte bh 5 >> put_ bh ab
     get bh = do
         h <- getByte bh
         case h of
@@ -1222,8 +1222,8 @@ instance Binary IfaceInfoItem where
                     ad <- get bh
                     return (HsUnfold lb ad)
             3 -> get bh >>= (return . HsInline)
-            4 -> get bh >>= (return . ND_HsStrictness) 
-            _ -> return HsNoCafRefs
+            4 -> return HsNoCafRefs
+            _ -> get bh >>= (return . ND_HsStrictness) 
 
 instance Binary IfaceUnfolding where
     put_ bh (IfCoreUnfold s e) = do
