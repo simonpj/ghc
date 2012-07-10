@@ -75,7 +75,8 @@ import Coercion
 import TysPrim
 import DataCon          ( DataCon, dataConWorkId )
 import IdInfo		( vanillaIdInfo, setStrictnessInfo, 
-                          nd_setStrictnessInfo, setArityInfo )
+                          nd_setStrictnessInfo, 
+                          setArityInfo )
 import Demand
 import qualified NewDemand as ND
 import Name      hiding ( varName )
@@ -750,6 +751,6 @@ pc_bottoming_Id name ty
 
     strict_sig    = mkStrictSig (mkTopDmdType [evalDmd] BotRes)
     nd_strict_sig = ND.mkStrictSig (ND.mkTopDmdType [ND.strictlyUsedDmd] ND.botRes)
-        -- These "bottom" out, no matter what their arguments
+    -- These "bottom" out, no matter what their arguments
 \end{code}
 

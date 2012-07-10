@@ -916,7 +916,8 @@ transferIdInfo exported_id local_id
   = modifyIdInfo transfer exported_id
   where
     local_info = idInfo local_id
-    transfer exp_info = exp_info `setStrictnessInfo` strictnessInfo local_info
+    transfer exp_info = exp_info `setStrictnessInfo`    strictnessInfo local_info
+                                 `nd_setStrictnessInfo` nd_strictnessInfo local_info
                                  `setUnfoldingInfo`     unfoldingInfo local_info
                                  `setInlinePragInfo`    inlinePragInfo local_info
                                  `setSpecInfo`          addSpecInfo (specInfo exp_info) new_info

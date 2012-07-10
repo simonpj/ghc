@@ -330,7 +330,6 @@ vanillaIdInfo
 	    occInfo		= NoOccInfo,
 	    demandInfo	        = Nothing,
 	    strictnessInfo      = Nothing,
-
             nd_demandInfo	= Nothing,
 	    nd_strictnessInfo   = Nothing
 	   }

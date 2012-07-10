@@ -34,6 +34,13 @@ import Util
 import BasicTypes
 import Binary
 
+{-! for StrDmd derive: Binary !-}
+{-! for AbsDmd derive: Binary !-}
+{-! for Demand derive: Binary !-}
+{-! for DmdResult derive: Binary !-}
+{-! for DmdType derive: Binary !-}
+{-! for StrictSig derive: Binary !-}
+
 \end{code}
 
 %************************************************************************

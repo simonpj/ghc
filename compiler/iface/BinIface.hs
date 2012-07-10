@@ -388,7 +388,6 @@ data BinSymbolTable = BinSymbolTable {
                                 -- indexed by Name
   }
 
-
 putFastString :: BinDictionary -> BinHandle -> FastString -> IO ()
 putFastString dict bh fs = allocateFastString dict fs >>= put_ bh
 

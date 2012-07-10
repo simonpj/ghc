@@ -1184,7 +1184,6 @@ tcIdInfo ignore_prags name ty info
     tcPrag info HsNoCafRefs        = return (info `setCafInfo`   NoCafRefs)
     tcPrag info (HsArity arity)    = return (info `setArityInfo` arity)
     tcPrag info (HsStrictness str) = return (info `setStrictnessInfo` Just str)
-
     tcPrag info (ND_HsStrictness str) = return (info `nd_setStrictnessInfo` Just str)
     tcPrag info (HsInline prag)    = return (info `setInlinePragInfo` prag)
 

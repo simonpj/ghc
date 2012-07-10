@@ -379,7 +379,7 @@ ppIdInfo id info
     has_strictness = isJust str_info
 
     nd_str_info = nd_strictnessInfo info
-    nd_has_strictness = isJust str_info
+    nd_has_strictness = isJust nd_str_info
 
     unf_info = unfoldingInfo info
     has_unf = hasSomeUnfolding unf_info
