@@ -14,10 +14,10 @@ module NewDemand (
 	DmdType(..), topDmdType, botDmdType, mkDmdType, mkTopDmdType, 
 		dmdTypeDepth, 
 	DmdEnv, emptyDmdEnv,
-	DmdResult(..), isBotRes, resTypeArgDmd, topRes, botRes,
-        appIsBottom, isBottomingSig, pprIfaceStrictSig, 
-	StrictSig(..), mkStrictSig, topSig, botSig,
-        isTopSig, 	splitStrictSig, increaseStrictSigArity,
+	DmdResult(..), isBotRes, isTopRes, resTypeArgDmd, topRes, botRes, cprRes,
+        appIsBottom, isBottomingSig, pprIfaceStrictSig, returnsCPR, 
+	StrictSig(..), mkStrictSig, topSig, botSig, cprSig,
+        isTopSig, splitStrictSig, increaseStrictSigArity,
        
         seqStrDmd, seqStrDmdList, seqAbsDmd, seqAbsDmdList,
         seqDemand, seqDemandList, seqDmdType, seqStrictSig, 
@@ -26,7 +26,7 @@ module NewDemand (
 
 #include "HsVersions.h"
 
---import StaticFlags
+import StaticFlags
 import Outputable
 import VarEnv
 import UniqFM
@@ -203,8 +203,8 @@ absProd ux
 
 
 instance LatticeLike AbsDmd where
-  bot                            = Abs
-  top                            = Used
+  bot                            = absBot
+  top                            = absTop
  
   pre Abs _                      = True
   pre _ Used                     = True
@@ -310,25 +310,150 @@ instance Binary JointDmd where
 
 %************************************************************************
 %*									*
-\subsection{Demand environments, types and results}
+\subsection{Demand results}
 %*									*
 %************************************************************************
 
 \begin{code}
 
+------------------------------------------------------------------------
+-- Pure demand result                                             
+------------------------------------------------------------------------
+
+data PureResult = TopRes	-- Nothing known, assumed to be just lazy
+                | BotRes        -- Diverges or errors
+ 	       deriving( Eq, Show )
+
+instance LatticeLike PureResult where
+     bot = BotRes
+     top = TopRes
+     pre x y = (x == y) || (y == top)
+     lub x y | x == y = x 
+     lub _ _          = top
+     both x y | x == y = x 
+     both _ _          = bot
+
+instance Binary PureResult where
+    put_ bh BotRes       = do putByte bh 0
+    put_ bh TopRes       = do putByte bh 1
+
+    get  bh = do
+            h <- getByte bh
+            case h of 
+              0 -> return bot       
+              _ -> return top
+
+
+------------------------------------------------------------------------
+-- Constructed Product Result                                             
+------------------------------------------------------------------------
+
+data CPRResult = NoCPR
+               | RetCPR
+               deriving( Eq, Show )
+
+instance LatticeLike CPRResult where
+     bot = RetCPR
+     top = NoCPR
+     pre x y = (x == y) || (y == top)
+     lub x y | x == y  = x 
+     lub _ _           = top
+     both x y | x == y = x 
+     both _ _          = bot
+
+instance Binary CPRResult where
+    put_ bh RetCPR       = do putByte bh 0
+    put_ bh NoCPR        = do putByte bh 1
+
+    get  bh = do
+            h <- getByte bh
+            case h of 
+              0 -> return bot       
+              _ -> return top
+
+------------------------------------------------------------------------
+-- Combined demand result                                             --
+------------------------------------------------------------------------
+
+data DmdResult = DR { res :: PureResult, cpr :: CPRResult }
+     deriving ( Eq )
+
+instance LatticeLike DmdResult where
+  bot                        = topRes
+  top                        = botRes
+
+  pre x _ | x == bot         = True
+  pre _ x | x == top         = True
+  pre (DR s1 a1) (DR s2 a2)  = (pre s1 s2) && (pre a1 a2)
+
+  lub  (DR s1 a1) (DR s2 a2) = mkDmdResult (lub s1 s2)  $ lub a1 a2            
+  both (DR s1 a1) (DR s2 a2) = mkDmdResult (both s1 s2) $ both a1 a2            
+
+-- Pretty-printing
+instance Outputable DmdResult where
+  ppr (DR TopRes RetCPR) = char 'm'   --    DDDr without ambiguity
+  ppr (DR BotRes _) = char 'b'   
+  ppr _ = empty	  -- Keep these distinct from Demand letters
+
+instance Binary DmdResult where
+    put_ bh (DR x y) = do put_ bh x; put_ bh y
+    get  bh = do 
+              x <- get bh
+              y <- get bh
+              return $ mkDmdResult x y
+
+mkDmdResult :: PureResult -> CPRResult -> DmdResult
+mkDmdResult BotRes NoCPR = topRes
+mkDmdResult x y = DR x y
+
+seqDmdResult :: DmdResult -> ()
+seqDmdResult (DR x y) = x `seq` y `seq` ()
+
+-- [cprRes] lets us switch off CPR analysis
+-- by making sure that everything uses TopRes instead of RetCPR
+-- Assuming, of course, that they don't mention RetCPR by name.
+-- They should onlyu use retCPR
+topRes, botRes, cprRes :: DmdResult
+topRes = DR TopRes NoCPR
+botRes = DR BotRes RetCPR
+cprRes | opt_CprOff = DR TopRes NoCPR
+       | otherwise  = DR TopRes RetCPR
+
+isTopRes :: DmdResult -> Bool
+isTopRes (DR TopRes NoCPR)  = True
+isTopRes _                  = False
+
+isBotRes :: DmdResult -> Bool
+isBotRes (DR BotRes RetCPR) = True
+isBotRes _                  = False
+
+returnsCPR :: DmdResult -> Bool
+returnsCPR (DR TopRes RetCPR) = True
+returnsCPR _      = False
+
+resTypeArgDmd :: DmdResult -> Demand
+-- TopRes and BotRes are polymorphic, so that
+--	BotRes === Bot -> BotRes === ...
+--	TopRes === Top -> TopRes === ...
+-- This function makes that concrete
+resTypeArgDmd r | isBotRes r = bot
+resTypeArgDmd _              = top
+
+
+\end{code}
+
+%************************************************************************
+%*									*
+\subsection{Demand environments and types}
+%*									*
+%************************************************************************
+
+\begin{code}
+
+
 type Demand = JointDmd
 
 type DmdEnv = VarEnv Demand
-
-data DmdResult = TopRes	-- Nothing known, assumed to be just lazy	
-	       | BotRes	-- Diverges or errors
-	       deriving( Eq, Show )
-	-- Equality for fixpoints
-	-- Show needed for Show in Lex.Token (sigh)
-
-topRes, botRes :: DmdResult
-topRes = TopRes
-botRes = BotRes
 
 data DmdType = DmdType 
 		  DmdEnv	-- Demand on explicitly-mentioned 
@@ -392,43 +517,19 @@ instance Binary DmdType where
            dr <- get bh 
            return (DmdType emptyDmdEnv ds dr)
 
-instance Outputable DmdResult where
-  ppr TopRes = empty	  -- Keep these distinct from Demand letters
-  ppr BotRes = char 'b'   --    DDDr without ambiguity
-
-
-instance Binary DmdResult where
-    put_ bh TopRes = do putByte bh 0
-    put_ bh BotRes = do putByte bh 1
-    get bh = do
-            h <- getByte bh
-            case h of
-              0 -> do return TopRes
-              _ -> do return BotRes
-
 emptyDmdEnv :: VarEnv Demand
 emptyDmdEnv = emptyVarEnv
 
-topDmdType, botDmdType :: DmdType
+topDmdType, botDmdType, cprDmdType :: DmdType
 topDmdType = DmdType emptyDmdEnv [] topRes
 botDmdType = DmdType emptyDmdEnv [] botRes
+cprDmdType = DmdType emptyDmdEnv [] cprRes
 
 isTopDmdType :: DmdType -> Bool
 -- Only used on top-level types, hence the assert
-isTopDmdType (DmdType env [] TopRes) = ASSERT( isEmptyVarEnv env) True	
+isTopDmdType (DmdType env [] res)
+             | isTopRes res          = ASSERT( isEmptyVarEnv env) True	
 isTopDmdType _                       = False
-
-isBotRes :: DmdResult -> Bool
-isBotRes BotRes = True
-isBotRes _      = False
-
-resTypeArgDmd :: DmdResult -> Demand
--- TopRes and BotRes are polymorphic, so that
---	BotRes === Bot -> BotRes === ...
---	TopRes === Top -> TopRes === ...
--- This function makes that concrete
-resTypeArgDmd TopRes = top
-resTypeArgDmd BotRes = bot
 
 mkDmdType :: DmdEnv -> [Demand] -> DmdResult -> DmdType
 mkDmdType fv ds res = DmdType fv ds res
@@ -441,7 +542,7 @@ dmdTypeDepth (DmdType _ ds _) = length ds
 
 seqDmdType :: DmdType -> ()
 seqDmdType (DmdType _env ds res) = 
-  {- ??? env `seq` -} seqDemandList ds `seq` res `seq` ()
+  {- ??? env `seq` -} seqDemandList ds `seq` seqDmdResult res `seq` ()
 
 \end{code}
 
@@ -503,9 +604,10 @@ increaseStrictSigArity arity_increase (StrictSig (DmdType env dmds res))
 isTopSig :: StrictSig -> Bool
 isTopSig (StrictSig ty) = isTopDmdType ty
 
-topSig, botSig:: StrictSig
+topSig, botSig, cprSig:: StrictSig
 topSig = StrictSig topDmdType
 botSig = StrictSig botDmdType
+cprSig = StrictSig cprDmdType
 
 -- Serialization
 instance Binary StrictSig where
@@ -531,11 +633,13 @@ or not.
 
 -- appIsBottom returns true if an application to n args would diverge
 appIsBottom :: StrictSig -> Int -> Bool
-appIsBottom (StrictSig (DmdType _ ds BotRes)) n = not $ lengthExceeds ds n 
+appIsBottom (StrictSig (DmdType _ ds res)) n
+            | isBotRes res                      = not $ lengthExceeds ds n 
 appIsBottom _				      _ = False
 
 isBottomingSig :: StrictSig -> Bool
-isBottomingSig (StrictSig (DmdType _ _ BotRes)) = True
+isBottomingSig (StrictSig (DmdType _ _ res))    
+               | isBotRes res                   = True
 isBottomingSig _				= False
 
 seqStrictSig :: StrictSig -> ()
