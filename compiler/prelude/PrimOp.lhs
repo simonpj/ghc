@@ -154,7 +154,7 @@ primOpStrictness :: PrimOp -> Arity -> StrictSig
 nd_primOpStrictness :: PrimOp -> Arity -> ND.StrictSig
 nd_primOpStrictness RaiseOp _ = ND.mkStrictSig (ND.mkTopDmdType [ND.top] ND.botRes) 
 nd_primOpStrictness RaiseIOOp _ = ND.mkStrictSig (ND.mkTopDmdType [ND.top, ND.top] ND.botRes) 
-nd_primOpStrictness DataToTagOp _ = ND.mkStrictSig (ND.mkTopDmdType [ND.strictlyUsedDmd] ND.topRes) 
+nd_primOpStrictness DataToTagOp _ = ND.mkStrictSig (ND.mkTopDmdType [ND.evalDmd] ND.topRes) 
 nd_primOpStrictness _ arity = ND.mkStrictSig (ND.mkTopDmdType (replicate arity ND.top) ND.topRes) 
 
 

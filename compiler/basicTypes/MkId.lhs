@@ -792,7 +792,7 @@ mkFCallId dflags uniq fcall ty
     (arg_tys, _)    = tcSplitFunTys tau
     arity           = length arg_tys
     strict_sig      = mkStrictSig (mkTopDmdType (replicate arity evalDmd) TopRes)
-    nd_strict_sig   = ND.mkStrictSig (ND.mkTopDmdType (replicate arity ND.strictlyUsedDmd) ND.topRes)
+    nd_strict_sig   = ND.mkStrictSig (ND.mkTopDmdType (replicate arity ND.evalDmd) ND.topRes)
 \end{code}
 
 

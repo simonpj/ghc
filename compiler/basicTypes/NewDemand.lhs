@@ -21,7 +21,7 @@ module NewDemand (
        
         seqStrDmd, seqStrDmdList, seqAbsDmd, seqAbsDmdList,
         seqDemand, seqDemandList, seqDmdType, seqStrictSig, 
-        strictlyUsedDmd,
+        evalDmd, vanillaCall, isStrictDmd,
      ) where
 
 #include "HsVersions.h"
@@ -283,9 +283,6 @@ instance LatticeLike JointDmd where
   lub  (JD s1 a1) (JD s2 a2) = mkJointDmd (lub s1 s2)  $ lub a1 a2            
   both (JD s1 a1) (JD s2 a2) = mkJointDmd (both s1 s2) $ both a1 a2            
 
-strictlyUsedDmd :: JointDmd
-strictlyUsedDmd = mkJointDmd strStr absTop
-
 isTop :: JointDmd -> Bool
 isTop (JD s a) 
       | s == top && a == top = True
@@ -306,6 +303,20 @@ instance Binary JointDmd where
               x <- get bh
               y <- get bh
               return $ mkJointDmd x y
+
+isStrictDmd :: Demand -> Bool
+isStrictDmd (JD x _) = x /= top
+
+evalDmd :: JointDmd
+evalDmd = mkJointDmd strStr absTop
+
+vanillaCall :: Arity -> Demand
+vanillaCall 0 = evalDmd
+vanillaCall n =
+  -- generate S^n (S)  
+  let strComp = (iterate (strProd False . return) strStr) !! n
+   in mkJointDmd strComp absTop
+
 \end{code}
 
 %************************************************************************

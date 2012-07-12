@@ -750,7 +750,7 @@ pc_bottoming_Id name ty
         -- SRTs.
 
     strict_sig    = mkStrictSig (mkTopDmdType [evalDmd] BotRes)
-    nd_strict_sig = ND.mkStrictSig (ND.mkTopDmdType [ND.strictlyUsedDmd] ND.botRes)
+    nd_strict_sig = ND.mkStrictSig (ND.mkTopDmdType [ND.evalDmd] ND.botRes)
     -- These "bottom" out, no matter what their arguments
 \end{code}
 
