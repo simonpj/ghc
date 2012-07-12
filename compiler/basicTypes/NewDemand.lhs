@@ -10,7 +10,7 @@ module NewDemand (
         LatticeLike, top, bot, lub, both, pre,
         StrDmd(..), strBot, strTop, strStr, strProd,
         AbsDmd(..), absBot, absTop, absProd,
-        Demand, JointDmd(..), mkJointDmd, isTop,
+        Demand, JointDmd(..), mkJointDmd, isTop, isAbs,
 	DmdType(..), topDmdType, botDmdType, mkDmdType, mkTopDmdType, 
 		dmdTypeDepth, 
 	DmdEnv, emptyDmdEnv,
@@ -21,7 +21,8 @@ module NewDemand (
        
         seqStrDmd, seqStrDmdList, seqAbsDmd, seqAbsDmdList,
         seqDemand, seqDemandList, seqDmdType, seqStrictSig, 
-        evalDmd, vanillaCall, isStrictDmd,
+        evalDmd, vanillaCall, isStrictDmd, splitCallDmd, splitDmdTy,
+        defer, deferType, deferEnv
      ) where
 
 #include "HsVersions.h"
@@ -284,9 +285,13 @@ instance LatticeLike JointDmd where
   both (JD s1 a1) (JD s2 a2) = mkJointDmd (both s1 s2) $ both a1 a2            
 
 isTop :: JointDmd -> Bool
-isTop (JD s a) 
-      | s == top && a == top = True
-isTop _                      = False 
+isTop (JD s a) | s == top && a == top = True
+isTop _                               = False 
+
+isAbs :: JointDmd -> Bool
+isAbs (JD s a) | s == top && a == bot = True
+isAbs _                               = False 
+
 
 -- More utility functions for strictness
 seqDemand :: JointDmd -> ()
@@ -310,12 +315,21 @@ isStrictDmd (JD x _) = x /= top
 evalDmd :: JointDmd
 evalDmd = mkJointDmd strStr absTop
 
+splitCallDmd :: JointDmd -> (Int, JointDmd)
+splitCallDmd (JD (SProd False [d]) a) 
+  = case splitCallDmd (JD d a) of
+      (n, r) -> (n + 1, r)
+splitCallDmd d	      = (0, d)
+
 vanillaCall :: Arity -> Demand
 vanillaCall 0 = evalDmd
 vanillaCall n =
   -- generate S^n (S)  
   let strComp = (iterate (strProd False . return) strStr) !! n
    in mkJointDmd strComp absTop
+
+defer :: Demand -> Demand
+defer (JD _ a) = (JD bot a)
 
 \end{code}
 
@@ -450,7 +464,6 @@ resTypeArgDmd :: DmdResult -> Demand
 resTypeArgDmd r | isBotRes r = bot
 resTypeArgDmd _              = top
 
-
 \end{code}
 
 %************************************************************************
@@ -555,6 +568,18 @@ seqDmdType :: DmdType -> ()
 seqDmdType (DmdType _env ds res) = 
   {- ??? env `seq` -} seqDemandList ds `seq` seqDmdResult res `seq` ()
 
+splitDmdTy :: DmdType -> (Demand, DmdType)
+-- Split off one function argument
+-- We already have a suitable demand on all
+-- free vars, so no need to add more!
+splitDmdTy (DmdType fv (dmd:dmds) res_ty) = (dmd, DmdType fv dmds res_ty)
+splitDmdTy ty@(DmdType _ [] res_ty)       = (resTypeArgDmd res_ty, ty)
+
+deferType :: DmdType -> DmdType
+deferType (DmdType fv _ _) = DmdType (deferEnv fv) [] top
+
+deferEnv :: DmdEnv -> DmdEnv
+deferEnv fv = mapVarEnv defer fv
 \end{code}
 
 %************************************************************************

@@ -33,7 +33,10 @@ import Data.List
 import Id
 import CoreUtils	( exprIsHNF, exprIsTrivial )
 import UniqFM	
-
+import TyCon
+import Pair
+import Type
+import Coercion         ( coercionKind )
 
 -- import Var		( Var, isTyVar )
 -- import Util
@@ -49,7 +52,6 @@ import UniqFM
 -- import UniqFM		( addToUFM_Directly, lookupUFM_Directly,
 -- 			  minusUFM, filterUFM )
 -- import Type		( isUnLiftedType, eqType, tyConAppTyCon_maybe )
--- import Coercion         ( coercionKind )
 -- import Pair
 
 
@@ -99,15 +101,90 @@ dmdAnalTopBind sigs (Rec pairs)
 \begin{code}
 dmdAnal :: AnalEnv -> Demand -> CoreExpr -> (DmdType, CoreExpr)
 
-dmdAnal _ dmd e | dmd == top 
+dmdAnal _ dmd e | isTop(dmd) || isAbs(dmd)
   -- top demand does not provide any way to infer something interesting 
   = (topDmdType, e)
 
+--Ilya: Why?!
+dmdAnal env dmd e
+  | not (isStrictDmd dmd)
+  = let (res_ty, e') = dmdAnal env evalDmd e
+    in  -- compute as with a strict demand, return with a lazy demand
+    (deferType res_ty, e')
+	-- It's important not to analyse e with a lazy demand because
+	-- a) When we encounter   case s of (a,b) -> 
+	--	we demand s with U(d1d2)... but if the overall demand is lazy
+	--	that is wrong, and we'd need to reduce the demand on s,
+	--	which is inconvenient
+	-- b) More important, consider
+	--	f (let x = R in x+x), where f is lazy
+	--    We still want to mark x as demanded, because it will be when we
+	--    enter the let.  If we analyse f's arg with a Lazy demand, we'll
+	--    just mark x as Lazy
+	-- c) The application rule wouldn't be right either
+	--    Evaluating (f x) in a L demand does *not* cause
+	--    evaluation of f in a C(L) demand!
+
+dmdAnal _ _ (Lit lit) = (topDmdType, Lit lit)
+dmdAnal _ _ (Type ty) = (topDmdType, Type ty)	-- Doesn't happen, in fact
+dmdAnal _ _ (Coercion co) = (topDmdType, Coercion co)
+
+dmdAnal env dmd (Var var)
+  = (dmdTransform env var dmd, Var var)
+
+dmdAnal env dmd (Cast e co)
+  = (dmd_ty, Cast e' co)
+  where
+    (dmd_ty, e') = dmdAnal env dmd' e
+    to_co        = pSnd (coercionKind co)
+    dmd'
+      | Just tc <- tyConAppTyCon_maybe to_co
+      , isRecursiveTyCon tc = evalDmd
+      | otherwise           = dmd
+	-- This coerce usually arises from a recursive
+        -- newtype, and we don't want to look inside them
+	-- for exactly the same reason that we don't look
+	-- inside recursive products -- we might not reach
+	-- a fixpoint.  So revert to a vanilla Eval demand
+
+dmdAnal env dmd (Tick t e)
+  = (dmd_ty, Tick t e')
+  where
+    (dmd_ty, e') = dmdAnal env dmd e
+
+dmdAnal env dmd (App fun (Type ty))
+  = (fun_ty, App fun' (Type ty))
+  where
+    (fun_ty, fun') = dmdAnal env dmd fun
+
+dmdAnal sigs dmd (App fun (Coercion co))
+  = (fun_ty, App fun' (Coercion co))
+  where
+    (fun_ty, fun') = dmdAnal sigs dmd fun
 
 
 dmdAnal _ _ _  = undefined
 
 \end{code}
+
+%************************************************************************
+%*									*
+                    Demand transformer
+%*									*
+%************************************************************************
+
+\begin{code}
+dmdTransform :: AnalEnv		-- The strictness environment
+	     -> Id		-- The function
+	     -> Demand		-- The demand on the function
+	     -> DmdType		-- The demand type of the function in this context
+	-- Returned DmdEnv includes the demand on 
+	-- this function plus demand on its free variables
+
+dmdTransform _ _ _ = undefined
+
+\end{code}
+
 
 %************************************************************************
 %*									*
@@ -144,7 +221,6 @@ dmdAnalRhs top_lvl rec_flag env (id, rhs)
 		       mkSigTy top_lvl rec_flag id rhs rhs_dmd_ty
   id'		     = id `nd_setIdStrictness` sig_ty
   sigs'		     = extendSigEnv top_lvl (sigEnv env) id' sig_ty
-
 
 \end{code}
 
