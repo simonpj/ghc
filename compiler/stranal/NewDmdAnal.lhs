@@ -203,8 +203,105 @@ dmdAnal env dmd (Lam var body)
     in
     (deferType lam_ty, Lam var' body')
 
+dmdAnal env dmd (Case scrut case_bndr ty [alt@(DataAlt dc, _, _)])
+  | let tycon = dataConTyCon dc
+  , isProductTyCon tycon
+  , not (isRecursiveTyCon tycon)
+  = let
+	env_alt	              = extendAnalEnv NotTopLevel env case_bndr case_bndr_sig
+	(alt_ty, alt')	      = dmdAnalAlt env_alt dmd alt
+	(alt_ty1, case_bndr') = annotateBndr alt_ty case_bndr
+	(_, bndrs', _)	      = alt'
+	case_bndr_sig	      = cprSig
+		-- Inside the alternative, the case binder has the CPR property.
+		-- Meaning that a case on it will successfully cancel.
+		-- Example:
+		--	f True  x = case x of y { I# x' -> if x' ==# 3 then y else I# 8 }
+		--	f False x = I# 3
+		--	
+		-- We want f to have the CPR property:
+		--	f b x = case fw b x of { r -> I# r }
+		--	fw True  x = case x of y { I# x' -> if x' ==# 3 then x' else 8 }
+		--	fw False x = 3
+
+	-- Figure out whether the demand on the case binder is used, and use
+	-- that to set the scrut_dmd.  This is utterly essential.
+	-- Consider	f x = case x of y { (a,b) -> k y a }
+	-- If we just take scrut_demand = U(L,A), then we won't pass x to the
+	-- worker, so the worker will rebuild 
+	--	x = (a, absent-error)
+	-- and that'll crash.
+	-- So at one stage I had:
+	--	dead_case_bndr		 = isAbsentDmd (idDemandInfo case_bndr')
+	--	keepity | dead_case_bndr = Drop
+	--		| otherwise	 = Keep		
+	--
+	-- But then consider
+	--	case x of y { (a,b) -> h y + a }
+	-- where h : U(LL) -> T
+	-- The above code would compute a Keep for x, since y is not Abs, which is silly
+	-- The insight is, of course, that a demand on y is a demand on the
+	-- scrutinee, so we need to `both` it with the scrut demand
+
+	alt_dmd 	   = mkProdDmd [nd_idDemandInfo b | b <- bndrs', isId b]
+        scrut_dmd 	   = alt_dmd `both`
+			     idDemandInfo case_bndr'
+
+	(scrut_ty, scrut') = dmdAnal env scrut_dmd scrut
+        res_ty             = alt_ty1 `both` scrut_ty
+    in
+--    pprTrace "dmdAnal:Case1" (vcat [ text "scrut" <+> ppr scrut
+--                                  , text "scrut_ty" <+> ppr scrut_ty
+--                                  , text "alt_ty" <+> ppr alt_ty1
+--                                  , text "res_ty" <+> ppr res_ty ]) $
+    (res_ty, Case scrut' case_bndr' ty [alt'])
+
 
 dmdAnal _ _ _  = undefined
+
+dmdAnalAlt :: AnalEnv -> Demand -> Alt Var -> (DmdType, Alt Var)
+dmdAnalAlt env dmd (con,bndrs,rhs)
+  = let 
+	(rhs_ty, rhs')   = dmdAnal env dmd rhs
+        rhs_ty'          = addDataConPatDmds con bndrs rhs_ty
+	(alt_ty, bndrs') = annotateBndrs rhs_ty' bndrs
+	final_alt_ty | io_hack_reqd = alt_ty `lub` topDmdType
+		     | otherwise    = alt_ty
+
+	-- There's a hack here for I/O operations.  Consider
+	-- 	case foo x s of { (# s, r #) -> y }
+	-- Is this strict in 'y'.  Normally yes, but what if 'foo' is an I/O
+	-- operation that simply terminates the program (not in an erroneous way)?
+	-- In that case we should not evaluate y before the call to 'foo'.
+	-- Hackish solution: spot the IO-like situation and add a virtual branch,
+	-- as if we had
+	-- 	case foo x s of 
+	--	   (# s, r #) -> y 
+	--	   other      -> return ()
+	-- So the 'y' isn't necessarily going to be evaluated
+	--
+	-- A more complete example (Trac #148, #1592) where this shows up is:
+	--	do { let len = <expensive> ;
+	--	   ; when (...) (exitWith ExitSuccess)
+	--	   ; print len }
+
+	io_hack_reqd = con == DataAlt unboxedPairDataCon &&
+		       idType (head bndrs) `eqType` realWorldStatePrimTy
+    in	
+    (final_alt_ty, (con, bndrs', rhs'))
+
+addDataConPatDmds :: AltCon -> [Var] -> DmdType -> DmdType
+-- See Note [Add demands for strict constructors]
+addDataConPatDmds DEFAULT    _ dmd_ty = dmd_ty
+addDataConPatDmds (LitAlt _) _ dmd_ty = dmd_ty
+addDataConPatDmds (DataAlt con) bndrs dmd_ty
+  = foldr add dmd_ty str_bndrs 
+  where
+    add bndr dmd_ty = addVarDmd dmd_ty bndr seqDmd
+    str_bndrs = [ b | (b,s) <- zipEqual "addDataConPatBndrs"
+                                   (filter isId bndrs)
+                                   (dataConRepStrictness con)
+                    , isMarkedStrict s ]
 
 \end{code}
 
@@ -399,6 +496,19 @@ removeFV fv id res = (fv', dmd)
 		  dmd = lookupVarEnv fv id `orElse` deflt
 	 	  deflt | isBotRes res = bot
 		        | otherwise    = absDmd
+
+annotateBndr :: DmdType -> Var -> (DmdType, Var)
+-- The returned env has the var deleted
+-- The returned var is annotated with demand info
+-- No effect on the argument demands
+annotateBndr dmd_ty@(DmdType fv ds res) var
+  | isTyVar var = (dmd_ty, var)
+  | otherwise   = (DmdType fv' ds res, setIdDemandInfo var dmd)
+  where
+    (fv', dmd) = removeFV fv var res
+
+annotateBndrs :: DmdType -> [Var] -> (DmdType, [Var])
+annotateBndrs = mapAccumR annotateBndr
 
 annotateLamIdBndr :: AnalEnv
                   -> DmdType 	-- Demand type of body

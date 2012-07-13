@@ -10,7 +10,8 @@ module NewDemand (
         LatticeLike, top, bot, lub, both, pre,
         StrDmd(..), strBot, strTop, strStr, strProd, strCall,
         AbsDmd(..), absBot, absTop, absProd,
-        Demand, JointDmd(..), mkJointDmd, isTop, isAbs, absDmd,
+        Demand, JointDmd(..), mkJointDmd, mkProdDmd, 
+        isTop, isAbs, absDmd,
 	DmdType(..), topDmdType, botDmdType, mkDmdType, mkTopDmdType, 
 		dmdTypeDepth, 
 	DmdEnv, emptyDmdEnv,
@@ -324,6 +325,14 @@ mkJointDmd s a
  = case (s, a) of 
      (HyperStr, UProd _) -> JD HyperStr Used
      _                   -> JD s a
+
+mkProdDmd :: [JointDmd] -> JointDmd
+mkProdDmd dx 
+  = ASSERT( length sx == length ux)
+    mkJointDmd sp up 
+  where
+    sp = strProd $ map str dx
+    up = absProd $ map abs dx   
      
 instance LatticeLike JointDmd where
   bot                        = mkJointDmd bot bot
