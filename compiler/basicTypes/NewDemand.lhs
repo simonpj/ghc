@@ -8,7 +8,7 @@
 
 module NewDemand (
         LatticeLike, top, bot, lub, both, pre,
-        StrDmd(..), strBot, strTop, strStr, strProd,
+        StrDmd(..), strBot, strTop, strStr, strProd, strCall,
         AbsDmd(..), absBot, absTop, absProd,
         Demand, JointDmd(..), mkJointDmd, isTop, isAbs,
 	DmdType(..), topDmdType, botDmdType, mkDmdType, mkTopDmdType, 
@@ -83,6 +83,7 @@ instance LatticeLike Bool where
 data StrDmd
   = HyperStr             -- Hyper-strict 
   | Lazy                 -- Lazy
+  | Call StrDmd          -- Call demand
   | Str                  -- Strict
   | SProd Bool [StrDmd]  -- Possibly deferred roduct or function demand
                          -- False === strict, True === deferred
@@ -95,9 +96,15 @@ strBot     = HyperStr
 strTop     = Lazy
 strStr     = Str
 
+strCall :: StrDmd -> StrDmd
+strCall s  = case s of 
+               Lazy     -> Lazy
+               HyperStr -> HyperStr
+               _        -> Call s
+
 strProd :: Bool -> [StrDmd] -> StrDmd
 strProd def sx 
-  = if all (== Lazy) sx  -- no demand products with empty lists
+  = if all (== Lazy) sx  -- no strictness demand products with empty lists
       then if def then Lazy else Str
       else if (not def) && (any (== HyperStr) sx) then HyperStr
            else SProd def sx
@@ -107,6 +114,7 @@ strProd def sx
 instance Outputable StrDmd where
   ppr HyperStr      = char 'B'
   ppr Lazy          = char 'L'
+  ppr (Call s)      = char 'C' <> parens (ppr s)
   ppr Str           = char 'S'
   ppr (SProd d sx)  = (char (if d then 'L' else 'S')) <> parens (hcat (map ppr sx))
 
@@ -117,10 +125,12 @@ instance LatticeLike StrDmd where
   
   pre _ Lazy                               = True
   pre HyperStr _                           = True
+  pre (Call s1) (Call s2)                  = pre s1 s2
+  pre (Call _) Str                         = True
   pre (SProd False _) Str                  = True
   pre (SProd d1 sx1) (SProd d2 sx2)    
             | d1 `pre` d2 &&    
-              length sx1 == length sx2   = all (== True) $ zipWith pre sx1 sx2 
+              length sx1 == length sx2     = all (== True) $ zipWith pre sx1 sx2 
   pre x y                                  = x == y
 
   lub x y | x == y                         = x 
@@ -131,6 +141,8 @@ instance LatticeLike StrDmd where
   lub (SProd d1 sx1) (SProd d2 sx2) 
            | length sx1 == length sx2      = strProd (d1 `lub` d2) $ zipWith lub sx1 sx2
            | otherwise                     = strProd (d1 `lub` d2) $ []
+  lub (Call s1) (Call s2)                  = Call (s1 `lub` s2)
+  lub (Call _)  Str                        = strStr
   lub _ _                                  = strTop
 
   both x y | x == y                        = x 
@@ -140,11 +152,14 @@ instance LatticeLike StrDmd where
   both s@(SProd False _) Str               = s
   both (SProd d1 sx1) (SProd d2 sx2) 
            | length sx1 == length sx2      = strProd (d1 `both` d2) $ zipWith both sx1 sx2 
+  both (Call s1) (Call s2)                 = Call (s1 `both` s2)
+  both s@(Call _)  Str                     = s
   both _ _                                 = strBot
 
 -- utility functions to deal with memory leaks
 seqStrDmd :: StrDmd -> ()
 seqStrDmd (SProd d ds) = d `seq` seqStrDmdList ds
+seqStrDmd (Call s)     = s `seq` () 
 seqStrDmd _            = ()
 
 seqStrDmdList :: [StrDmd] -> ()
@@ -156,7 +171,9 @@ instance Binary StrDmd where
   put_ bh HyperStr     = do putByte bh 0
   put_ bh Lazy         = do putByte bh 1
   put_ bh Str          = do putByte bh 2
-  put_ bh (SProd d sx) = do putByte bh 3
+  put_ bh (Call s)     = do putByte bh 3
+                            put_ bh s
+  put_ bh (SProd d sx) = do putByte bh 4
                             put_ bh d
                             put_ bh sx  
   get bh = do 
@@ -165,6 +182,8 @@ instance Binary StrDmd where
            0 -> do return strBot
            1 -> do return strTop
            2 -> do return strStr
+           3 -> do s  <- get bh
+                   return $ strCall s
            _ -> do d  <- get bh
                    sx <- get bh
                    return $ strProd d sx
@@ -316,7 +335,7 @@ evalDmd :: JointDmd
 evalDmd = mkJointDmd strStr absTop
 
 splitCallDmd :: JointDmd -> (Int, JointDmd)
-splitCallDmd (JD (SProd False [d]) a) 
+splitCallDmd (JD (Call d) a) 
   = case splitCallDmd (JD d a) of
       (n, r) -> (n + 1, r)
 splitCallDmd d	      = (0, d)
@@ -325,7 +344,7 @@ vanillaCall :: Arity -> Demand
 vanillaCall 0 = evalDmd
 vanillaCall n =
   -- generate S^n (S)  
-  let strComp = (iterate (strProd False . return) strStr) !! n
+  let strComp = (iterate strCall strStr) !! n
    in mkJointDmd strComp absTop
 
 defer :: Demand -> Demand

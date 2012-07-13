@@ -32,6 +32,7 @@ import FastString
 import Data.List
 import Id
 import CoreUtils	( exprIsHNF, exprIsTrivial )
+import PprCore	
 import UniqFM	
 import TyCon
 import Pair
@@ -185,7 +186,6 @@ dmdTransform _ _ _ = undefined
 
 \end{code}
 
-
 %************************************************************************
 %*									*
 \subsection{Bindings}
@@ -200,7 +200,64 @@ dmdFix :: TopLevelFlag
        -> [(Id,CoreExpr)]
        -> (SigEnv, DmdEnv,
 	   [(Id,CoreExpr)])	-- Binders annotated with stricness info
-dmdFix = undefined
+
+dmdFix top_lvl env orig_pairs
+  = loop 1 initial_env orig_pairs
+  where
+    bndrs        = map fst orig_pairs
+    initial_env = addInitialSigs top_lvl env bndrs
+    
+    loop :: Int
+	 -> AnalEnv			-- Already contains the current sigs
+	 -> [(Id,CoreExpr)] 		
+	 -> (SigEnv, DmdEnv, [(Id,CoreExpr)])
+    loop n env pairs
+      = -- pprTrace "dmd loop" (ppr n <+> ppr bndrs $$ ppr env) $
+        loop' n env pairs
+
+    loop' n env pairs
+      | found_fixpoint
+      = (sigs', lazy_fv, pairs')
+		-- Note: return pairs', not pairs.   pairs' is the result of 
+		-- processing the RHSs with sigs (= sigs'), whereas pairs 
+		-- is the result of processing the RHSs with the *previous* 
+		-- iteration of sigs.
+
+      | n >= 10  
+      = pprTrace "dmdFix loop" (ppr n <+> (vcat 
+			[ text "Sigs:" <+> ppr [ (id,lookupVarEnv sigs id, lookupVarEnv sigs' id) 
+                                               | (id,_) <- pairs],
+			  text "env:" <+> ppr env,
+			  text "binds:" <+> pprCoreBinding (Rec pairs)]))
+	(sigEnv env, lazy_fv, orig_pairs)	-- Safe output
+		-- The lazy_fv part is really important!  orig_pairs has no strictness
+		-- info, including nothing about free vars.  But if we have
+		--	letrec f = ....y..... in ...f...
+		-- where 'y' is free in f, we must record that y is mentioned, 
+		-- otherwise y will get recorded as absent altogether
+
+      | otherwise
+      = loop (n+1) (nonVirgin sigs') pairs'
+      where
+        sigs = sigEnv env
+	found_fixpoint = all (same_sig sigs sigs') bndrs 
+
+	((sigs',lazy_fv), pairs') = mapAccumL my_downRhs (sigs, emptyDmdEnv) pairs
+		-- mapAccumL: Use the new signature to do the next pair
+		-- The occurrence analyser has arranged them in a good order
+		-- so this can significantly reduce the number of iterations needed
+	
+        my_downRhs (sigs,lazy_fv) (id,rhs)
+          = ((sigs', lazy_fv'), pair')
+          where
+	    (sigs', lazy_fv1, pair') = dmdAnalRhs top_lvl Recursive (updSigEnv env sigs) (id,rhs)
+	    lazy_fv'		     = plusVarEnv_C both lazy_fv lazy_fv1
+	   
+    same_sig sigs sigs' var = lookup sigs var == lookup sigs' var
+    lookup sigs var = case lookupVarEnv sigs var of
+			Just (sig,_) -> sig
+                        Nothing      -> pprPanic "dmdFix" (ppr var)
+
 
 -- Non-recursive bindings
 dmdAnalRhs :: TopLevelFlag -> RecFlag
@@ -208,7 +265,6 @@ dmdAnalRhs :: TopLevelFlag -> RecFlag
 	-> (SigEnv,  DmdEnv, (Id, CoreExpr))
 -- Process the RHS of the binding, add the strictness signature
 -- to the Id, and augment the environment with the signature as well.
-
 dmdAnalRhs top_lvl rec_flag env (id, rhs)
  = (sigs', lazy_fv, (id', rhs'))
  where
