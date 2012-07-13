@@ -81,15 +81,21 @@ dmdAnalProgram _ binds
 -- Analyse a (group of) top-level binding(s)
 dmdAnalTopBind :: SigEnv -> CoreBind -> (SigEnv, CoreBind)
 dmdAnalTopBind sigs (NonRec id rhs)
-  = (sigs1, NonRec id1 rhs1)
+  = (sigs2, NonRec id2 rhs2)
   where
-    (sigs1, _, (id1,   rhs1)) = dmdAnalRhs TopLevel NonRecursive (virgin sigs) (id, rhs)
-    -- what about the second step?
+    (    _, _, (_,   rhs1)) = dmdAnalRhs TopLevel NonRecursive (virgin sigs)    (id, rhs)
+    (sigs2, _, (id2, rhs2)) = dmdAnalRhs TopLevel NonRecursive (nonVirgin sigs) (id, rhs1)
+    	-- Do two passes to improve CPR information
+    	-- See comments with ignore_cpr_info in mk_sig_ty
+    	-- and with extendSigsWithLam
 
 dmdAnalTopBind sigs (Rec pairs)
   = (sigs', Rec pairs')
   where
     (sigs', _, pairs')  = dmdFix TopLevel (virgin sigs) pairs
+		-- We get two iterations automatically
+		-- c.f. the NonRec case above
+
 
 \end{code}
 
@@ -102,7 +108,7 @@ dmdAnalTopBind sigs (Rec pairs)
 \begin{code}
 dmdAnal :: AnalEnv -> Demand -> CoreExpr -> (DmdType, CoreExpr)
 
-dmdAnal _ dmd e | isTop(dmd) || isAbs(dmd)
+dmdAnal _ dmd e | isTop(dmd)
   -- top demand does not provide any way to infer something interesting 
   = (topDmdType, e)
 
@@ -182,7 +188,65 @@ dmdTransform :: AnalEnv		-- The strictness environment
 	-- Returned DmdEnv includes the demand on 
 	-- this function plus demand on its free variables
 
-dmdTransform _ _ _ = undefined
+dmdTransform env var dmd
+
+------ 	DATA CONSTRUCTOR
+  | isDataConWorkId var		-- Data constructor
+  = let 
+	StrictSig dmd_ty    = nd_idStrictness var	-- It must have a strictness sig
+	DmdType _ _ con_res = dmd_ty
+	arity		    = idArity var
+    in
+    if arity == call_depth then		-- Saturated, so unleash the demand
+	let 
+           -- Important!  If we Keep the constructor application, then
+	   -- we need the demands the constructor places (always lazy)
+	   -- If not, we don't need to.  For example:
+	   --	f p@(x,y) = (p,y)	-- S(AL)
+	   --	g a b     = f (a,b)
+	   -- It's vital that we don't calculate Absent for a!
+
+	   -- ds can be empty, when we are just seq'ing the thing
+	   -- If so we must make up a suitable bunch of demands
+
+           -- [!!!] Invariant: res_dmd does not have call demand as its component
+	   arg_ds = if isPolyDmd res_dmd
+                    then replicateDmd arity res_dmd
+                    else splitProdDmd res_dmd
+	in
+	mkDmdType emptyDmdEnv arg_ds con_res
+		-- Must remember whether it's a product, hence con_res, not TopRes
+    else
+	topDmdType
+
+------ 	IMPORTED FUNCTION
+  | isGlobalId var,		-- Imported function
+    let StrictSig dmd_ty = nd_idStrictness var
+  = -- pprTrace "strict-sig" (ppr var $$ ppr dmd_ty) $
+    if dmdTypeDepth dmd_ty <= call_depth then	-- Saturated, so unleash the demand
+	dmd_ty
+    else
+	topDmdType
+
+------ 	LOCAL LET/REC BOUND THING
+  | Just (StrictSig dmd_ty, top_lvl) <- lookupSigEnv env var
+  = let
+	fn_ty | dmdTypeDepth dmd_ty <= call_depth = dmd_ty 
+	      | otherwise   		          = deferType dmd_ty
+	-- NB: it's important to use deferType, and not just return topDmdType
+	-- Consider	let { f x y = p + x } in f 1
+	-- The application isn't saturated, but we must nevertheless propagate 
+	--	a lazy demand for p!  
+    in
+    if isTopLevel top_lvl then fn_ty	-- Don't record top level things
+    else addVarDmd fn_ty var dmd
+
+------ 	LOCAL NON-LET/REC BOUND THING
+  | otherwise	 		-- Default case
+  = unitVarDmd var dmd
+
+  where
+    (call_depth, res_dmd) = splitCallDmd dmd
 
 \end{code}
 
@@ -287,6 +351,12 @@ dmdAnalRhs top_lvl rec_flag env (id, rhs)
 %************************************************************************
 
 \begin{code}
+unitVarDmd :: Var -> Demand -> DmdType
+unitVarDmd var dmd = DmdType (unitVarEnv var dmd) [] top
+
+addVarDmd :: DmdType -> Var -> Demand -> DmdType
+addVarDmd (DmdType fv ds res) var dmd
+  = DmdType (extendVarEnv_C both fv var dmd) ds res
 
 mkSigTy :: TopLevelFlag -> RecFlag -> Id -> CoreExpr -> DmdType -> (DmdEnv, StrictSig)
 mkSigTy top_lvl rec_flag id rhs dmd_ty 

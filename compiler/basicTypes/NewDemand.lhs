@@ -22,7 +22,8 @@ module NewDemand (
         seqStrDmd, seqStrDmdList, seqAbsDmd, seqAbsDmdList,
         seqDemand, seqDemandList, seqDmdType, seqStrictSig, 
         evalDmd, vanillaCall, isStrictDmd, splitCallDmd, splitDmdTy,
-        defer, deferType, deferEnv
+        defer, deferType, deferEnv, isPolyDmd, replicateDmd, splitProdDmd,
+
      ) where
 
 #include "HsVersions.h"
@@ -84,11 +85,9 @@ data StrDmd
   = HyperStr             -- Hyper-strict 
   | Lazy                 -- Lazy
   | Call StrDmd          -- Call demand
-  | Str                  -- Strict
-  | SProd Bool [StrDmd]  -- Possibly deferred roduct or function demand
-                         -- False === strict, True === deferred
+  | Str                  -- Head-Strict
+  | SProd [StrDmd]       -- Possibly deferred roduct or function demand
   deriving ( Eq, Show )
-
 
 -- Well-formedness preserving constructors for the Strictness domain
 strBot, strTop, strStr :: StrDmd
@@ -102,13 +101,11 @@ strCall s  = case s of
                HyperStr -> HyperStr
                _        -> Call s
 
-strProd :: Bool -> [StrDmd] -> StrDmd
-strProd def sx 
-  = if all (== Lazy) sx  -- no strictness demand products with empty lists
-      then if def then Lazy else Str
-      else if (not def) && (any (== HyperStr) sx) then HyperStr
-           else SProd def sx
-
+strProd :: [StrDmd] -> StrDmd
+strProd sx
+  | all (== Lazy) sx        = strStr
+  | any (== HyperStr) sx    = strTop
+  | otherwise               = SProd sx
 
 -- Pretty-printing
 instance Outputable StrDmd where
@@ -116,7 +113,7 @@ instance Outputable StrDmd where
   ppr Lazy          = char 'L'
   ppr (Call s)      = char 'C' <> parens (ppr s)
   ppr Str           = char 'S'
-  ppr (SProd d sx)  = (char (if d then 'L' else 'S')) <> parens (hcat (map ppr sx))
+  ppr (SProd sx)    = char 'S' <> parens (hcat (map ppr sx))
 
 -- LatticeLike implementation for strictness demands
 instance LatticeLike StrDmd where
@@ -127,20 +124,19 @@ instance LatticeLike StrDmd where
   pre HyperStr _                           = True
   pre (Call s1) (Call s2)                  = pre s1 s2
   pre (Call _) Str                         = True
-  pre (SProd False _) Str                  = True
-  pre (SProd d1 sx1) (SProd d2 sx2)    
-            | d1 `pre` d2 &&    
-              length sx1 == length sx2     = all (== True) $ zipWith pre sx1 sx2 
+  pre (SProd _) Str                        = True
+  pre (SProd sx1) (SProd sx2)    
+            | length sx1 == length sx2     = all (== True) $ zipWith pre sx1 sx2 
   pre x y                                  = x == y
 
   lub x y | x == y                         = x 
   lub y x | x `pre` y                      = lub x y
   lub HyperStr s                           = s
   lub _ Lazy                               = strTop
-  lub (SProd False _) Str                  = strStr
-  lub (SProd d1 sx1) (SProd d2 sx2) 
-           | length sx1 == length sx2      = strProd (d1 `lub` d2) $ zipWith lub sx1 sx2
-           | otherwise                     = strProd (d1 `lub` d2) $ []
+  lub (SProd _) Str                        = strStr
+  lub (SProd sx1) (SProd sx2) 
+           | length sx1 == length sx2      = strProd $ zipWith lub sx1 sx2
+           | otherwise                     = strStr
   lub (Call s1) (Call s2)                  = Call (s1 `lub` s2)
   lub (Call _)  Str                        = strStr
   lub _ _                                  = strTop
@@ -149,16 +145,16 @@ instance LatticeLike StrDmd where
   both y x | x `pre` y                     = both x y
   both HyperStr _                          = strBot
   both s Lazy                              = s
-  both s@(SProd False _) Str               = s
-  both (SProd d1 sx1) (SProd d2 sx2) 
-           | length sx1 == length sx2      = strProd (d1 `both` d2) $ zipWith both sx1 sx2 
+  both s@(SProd _) Str                     = s
+  both (SProd sx1) (SProd sx2) 
+           | length sx1 == length sx2      = strProd $ zipWith both sx1 sx2 
   both (Call s1) (Call s2)                 = Call (s1 `both` s2)
   both s@(Call _)  Str                     = s
   both _ _                                 = strBot
 
 -- utility functions to deal with memory leaks
 seqStrDmd :: StrDmd -> ()
-seqStrDmd (SProd d ds) = d `seq` seqStrDmdList ds
+seqStrDmd (SProd ds)   = seqStrDmdList ds
 seqStrDmd (Call s)     = s `seq` () 
 seqStrDmd _            = ()
 
@@ -173,8 +169,7 @@ instance Binary StrDmd where
   put_ bh Str          = do putByte bh 2
   put_ bh (Call s)     = do putByte bh 3
                             put_ bh s
-  put_ bh (SProd d sx) = do putByte bh 4
-                            put_ bh d
+  put_ bh (SProd sx)   = do putByte bh 4
                             put_ bh sx  
   get bh = do 
          h <- getByte bh
@@ -184,9 +179,21 @@ instance Binary StrDmd where
            2 -> do return strStr
            3 -> do s  <- get bh
                    return $ strCall s
-           _ -> do d  <- get bh
-                   sx <- get bh
-                   return $ strProd d sx
+           _ -> do sx <- get bh
+                   return $ strProd sx
+
+-- Splitting polymorphic demands
+replicateStrDmd :: Int -> StrDmd -> [StrDmd]
+replicateStrDmd n Lazy         = replicate n Lazy
+replicateStrDmd n HyperStr     = replicate n HyperStr
+replicateStrDmd n Str          = replicate n Lazy
+replicateStrDmd _ d            = pprPanic "replicateStrDmd" (ppr d)          
+
+isPolyStrDmd :: StrDmd -> Bool
+isPolyStrDmd Lazy     = True
+isPolyStrDmd HyperStr = True
+isPolyStrDmd Str      = True
+isPolyStrDmd _        = False
 
 \end{code}
 
@@ -201,6 +208,7 @@ instance Binary StrDmd where
 data AbsDmd
   = Abs                  -- Defenitely unused
   | Used                 -- May be used
+  | UHead                -- U(A...A)
   | UProd [AbsDmd]       -- Product
   deriving ( Eq, Show )
 
@@ -209,17 +217,20 @@ data AbsDmd
 instance Outputable AbsDmd where
   ppr Abs         = char 'A'
   ppr Used        = char 'U'
+  ppr UHead       = char 'H'
   ppr (UProd as)  = (char 'U') <> parens (hcat (map ppr as))
 
 -- Well-formedness preserving constructors for the Absence domain
-absBot, absTop :: AbsDmd
+absBot, absTop, absHead :: AbsDmd
 absBot     = Abs
+absHead    = UHead
 absTop     = Used
 
 absProd :: [AbsDmd] -> AbsDmd
 absProd ux 
-  = if all (== Used) ux 
-    then Used else UProd ux
+  | all (== Used) ux   = Used
+  | all (== Abs) ux    = UHead
+  | otherwise          = UProd ux
 
 
 instance LatticeLike AbsDmd where
@@ -228,6 +239,7 @@ instance LatticeLike AbsDmd where
  
   pre Abs _                      = True
   pre _ Used                     = True
+  pre UHead (UProd _)            = True
   pre (UProd ux1) (UProd ux2)
      | length ux1 == length ux2  = all (== True) $ zipWith pre ux1 ux2 
   pre x y                        = x == y
@@ -236,6 +248,7 @@ instance LatticeLike AbsDmd where
   lub y x | x `pre` y            = lub x y
   lub Abs a                      = a
   lub _ Used                     = absTop
+  lub UHead u@(UProd _)          = u
   lub (UProd ux1) (UProd ux2)
      | length ux1 == length ux2  = absProd $ zipWith lub ux1 ux2
   lub _ _                        = absTop
@@ -257,8 +270,10 @@ instance Binary AbsDmd where
             putByte bh 0
     put_ bh Used        = do 
             putByte bh 1
-    put_ bh (UProd ux) = do
+    put_ bh UHead       = do 
             putByte bh 2
+    put_ bh (UProd ux) = do
+            putByte bh 3
             put_ bh ux
 
     get  bh = do
@@ -266,8 +281,23 @@ instance Binary AbsDmd where
             case h of 
               0 -> return absBot       
               1 -> return absTop
+              2 -> return absHead
               _ -> do ux <- get bh
                       return $ absProd ux
+
+-- Splitting polymorphic demands
+replicateAbsDmd :: Int -> AbsDmd -> [AbsDmd]
+replicateAbsDmd n Abs          = replicate n Abs
+replicateAbsDmd n Used         = replicate n Used
+replicateAbsDmd n UHead        = replicate n Abs
+replicateAbsDmd _ d            = pprPanic "replicateAbsDmd" (ppr d)          
+
+isPolyAbsDmd :: AbsDmd -> Bool
+isPolyAbsDmd Abs      = True
+isPolyAbsDmd Used     = True
+isPolyAbsDmd UHead    = True
+isPolyAbsDmd _        = False
+
 \end{code}
   
 %************************************************************************
@@ -349,6 +379,45 @@ vanillaCall n =
 
 defer :: Demand -> Demand
 defer (JD _ a) = (JD bot a)
+
+\end{code}
+
+Note [Replicating polymorphic demands]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Some demands can be considered as polymorphic. Generally, it is
+applicable to such beasts as tops, bottoms as well as Head-Used adn
+Head-stricts demands. For instance,
+
+S ~ S(L, ..., L)
+
+Also, when top or bottom is occurred as a result demand, it in fact
+can be expanded to saturate a callee's arity. 
+
+
+\begin{code}
+
+-- Replicating polymorphic demands
+replicateDmd :: Int -> Demand -> [Demand]
+replicateDmd _ d
+  | not $ isPolyDmd d   = pprPanic "replicateDmd" (ppr d)          
+replicateDmd n (JD x y) = zipWith JD (replicateStrDmd n x) 
+                                     (replicateAbsDmd n y)
+
+isPolyDmd :: Demand -> Bool
+isPolyDmd (JD a b) = isPolyStrDmd a && isPolyAbsDmd b
+
+-- Split a product to parameteres
+splitProdDmd :: Demand -> [Demand]
+splitProdDmd (JD (SProd sx) (UProd ux))
+  = ASSERT( sx `lengthIs` (length ux) ) zipWith JD sx ux
+splitProdDmd (JD (SProd sx) u) 
+  | isPolyAbsDmd u  
+  =  zipWith JD sx (replicateAbsDmd (length sx) u)
+splitProdDmd (JD s (UProd ux))
+  | isPolyStrDmd s  
+  =  zipWith JD (replicateStrDmd (length ux) s) ux
+splitProdDmd d = pprPanic "splitProdDmd" (ppr d)
 
 \end{code}
 
