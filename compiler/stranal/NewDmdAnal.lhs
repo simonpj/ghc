@@ -38,6 +38,8 @@ import TyCon
 import Pair
 import Type
 import Coercion         ( coercionKind )
+import Util
+import Maybes		( orElse )
 
 -- import Var		( Var, isTyVar )
 -- import Util
@@ -168,6 +170,38 @@ dmdAnal sigs dmd (App fun (Coercion co))
   = (fun_ty, App fun' (Coercion co))
   where
     (fun_ty, fun') = dmdAnal sigs dmd fun
+
+-- Lots of the other code is there to make this
+-- beautiful, compositional, application rule :-)
+dmdAnal env dmd (App fun arg)	-- Non-type arguments
+  = let				-- [Type arg handled above]
+	(fun_ty, fun') 	  = dmdAnal env (mkCallDmd dmd) fun
+	(arg_ty, arg') 	  = dmdAnal env arg_dmd arg
+	(arg_dmd, res_ty) = splitDmdTy fun_ty
+    in
+    (res_ty `both` arg_ty, App fun' arg')
+
+dmdAnal env dmd (Lam var body)
+  | isTyVar var
+  = let   
+	(body_ty, body') = dmdAnal env dmd body
+    in
+    (body_ty, Lam var body')
+
+  | Just body_dmd <- peelCallDmd dmd	-- A call demand: good!
+  = let	
+	env'		 = extendSigsWithLam env var
+	(body_ty, body') = dmdAnal env' body_dmd body
+	(lam_ty, var')   = annotateLamIdBndr env body_ty var
+    in
+    (lam_ty, Lam var' body')
+
+  | otherwise	-- Not enough demand on the lambda; but do the body
+  = let		-- anyway to annotate it and gather free var info
+	(body_ty, body') = dmdAnal env evalDmd body
+	(lam_ty, var')   = annotateLamIdBndr env body_ty var
+    in
+    (deferType lam_ty, Lam var' body')
 
 
 dmdAnal _ _ _  = undefined
@@ -357,6 +391,37 @@ unitVarDmd var dmd = DmdType (unitVarEnv var dmd) [] top
 addVarDmd :: DmdType -> Var -> Demand -> DmdType
 addVarDmd (DmdType fv ds res) var dmd
   = DmdType (extendVarEnv_C both fv var dmd) ds res
+
+removeFV :: DmdEnv -> Var -> DmdResult -> (DmdEnv, Demand)
+removeFV fv id res = (fv', dmd)
+		where
+		  fv' = fv `delVarEnv` id
+		  dmd = lookupVarEnv fv id `orElse` deflt
+	 	  deflt | isBotRes res = bot
+		        | otherwise    = absDmd
+
+annotateLamIdBndr :: AnalEnv
+                  -> DmdType 	-- Demand type of body
+		  -> Id 	-- Lambda binder
+		  -> (DmdType, 	-- Demand type of lambda
+		      Id)	-- and binder annotated with demand	
+
+annotateLamIdBndr env (DmdType fv ds res) id
+-- For lambdas we add the demand to the argument demands
+-- Only called for Ids
+  = ASSERT( isId id )
+    (final_ty, nd_setIdDemandInfo id dmd)
+  where
+      -- Watch out!  See note [Lambda-bound unfoldings]
+    final_ty = case maybeUnfoldingTemplate (idUnfolding id) of
+                 Nothing  -> main_ty
+                 Just unf -> main_ty `both` unf_ty
+                          where
+                             (unf_ty, _) = dmdAnal env dmd unf
+    
+    main_ty = DmdType fv' (dmd:ds) res
+
+    (fv', dmd) = removeFV fv id res
 
 mkSigTy :: TopLevelFlag -> RecFlag -> Id -> CoreExpr -> DmdType -> (DmdEnv, StrictSig)
 mkSigTy top_lvl rec_flag id rhs dmd_ty 
@@ -610,6 +675,28 @@ virgin, nonVirgin :: SigEnv -> AnalEnv
 virgin    sigs = AE { ae_sigs = sigs, ae_virgin = True }
 nonVirgin sigs = AE { ae_sigs = sigs, ae_virgin = False }
 
+extendSigsWithLam :: AnalEnv -> Id -> AnalEnv
+-- Extend the AnalEnv when we meet a lambda binder
+-- If the binder is marked demanded with a product demand, then give it a CPR 
+-- signature, because in the likely event that this is a lambda on a fn defn 
+-- [we only use this when the lambda is being consumed with a call demand],
+-- it'll be w/w'd and so it will be CPR-ish.  E.g.
+--	f = \x::(Int,Int).  if ...strict in x... then
+--				x
+--			    else
+--				(a,b)
+-- We want f to have the CPR property because x does, by the time f has been w/w'd
+--
+-- Also note that we only want to do this for something that
+-- definitely has product type, else we may get over-optimistic 
+-- CPR results (e.g. from \x -> x!).
+
+extendSigsWithLam env id
+  = case nd_idDemandInfo_maybe id of
+	Nothing	             -> extendAnalEnv NotTopLevel env id cprSig
+		-- See Note [Optimistic in the Nothing case]
+	Just d | isProdDmd d -> extendAnalEnv NotTopLevel env id cprSig
+	_                    -> env
 \end{code}
 
 Note [Initialising strictness]

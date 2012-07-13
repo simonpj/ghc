@@ -10,7 +10,7 @@ module NewDemand (
         LatticeLike, top, bot, lub, both, pre,
         StrDmd(..), strBot, strTop, strStr, strProd, strCall,
         AbsDmd(..), absBot, absTop, absProd,
-        Demand, JointDmd(..), mkJointDmd, isTop, isAbs,
+        Demand, JointDmd(..), mkJointDmd, isTop, isAbs, absDmd,
 	DmdType(..), topDmdType, botDmdType, mkDmdType, mkTopDmdType, 
 		dmdTypeDepth, 
 	DmdEnv, emptyDmdEnv,
@@ -22,7 +22,8 @@ module NewDemand (
         seqStrDmd, seqStrDmdList, seqAbsDmd, seqAbsDmdList,
         seqDemand, seqDemandList, seqDmdType, seqStrictSig, 
         evalDmd, vanillaCall, isStrictDmd, splitCallDmd, splitDmdTy,
-        defer, deferType, deferEnv, isPolyDmd, replicateDmd, splitProdDmd,
+        defer, deferType, deferEnv, 
+        isProdDmd, isPolyDmd, replicateDmd, splitProdDmd, peelCallDmd, mkCallDmd
 
      ) where
 
@@ -35,6 +36,8 @@ import UniqFM
 import Util
 import BasicTypes
 import Binary
+import Maybes		( expectJust )
+
 
 {-! for StrDmd derive: Binary !-}
 {-! for AbsDmd derive: Binary !-}
@@ -341,6 +344,8 @@ isAbs :: JointDmd -> Bool
 isAbs (JD s a) | s == top && a == bot = True
 isAbs _                               = False 
 
+absDmd :: JointDmd
+absDmd = JD top bot
 
 -- More utility functions for strictness
 seqDemand :: JointDmd -> ()
@@ -363,6 +368,13 @@ isStrictDmd (JD x _) = x /= top
 
 evalDmd :: JointDmd
 evalDmd = mkJointDmd strStr absTop
+
+mkCallDmd :: JointDmd -> JointDmd
+mkCallDmd (JD d a) = (JD (Call d) a)
+
+peelCallDmd :: JointDmd -> Maybe JointDmd
+peelCallDmd (JD (Call d) a) = Just $ JD d a
+peelCallDmd _               = Nothing 
 
 splitCallDmd :: JointDmd -> (Int, JointDmd)
 splitCallDmd (JD (Call d) a) 
@@ -403,6 +415,12 @@ replicateDmd _ d
   | not $ isPolyDmd d   = pprPanic "replicateDmd" (ppr d)          
 replicateDmd n (JD x y) = zipWith JD (replicateStrDmd n x) 
                                      (replicateAbsDmd n y)
+
+-- Check whether is a product demand
+isProdDmd :: Demand -> Bool
+isProdDmd (JD (SProd _) _) = True
+isProdDmd (JD _ (UProd _)) = True
+isProdDmd _                = False
 
 isPolyDmd :: Demand -> Bool
 isPolyDmd (JD a b) = isPolyStrDmd a && isPolyAbsDmd b
@@ -609,6 +627,34 @@ instance Eq DmdType where
        (DmdType fv2 ds2 res2) =  ufmToList fv1 == ufmToList fv2
 			      && ds1 == ds2 && res1 == res2
 
+instance LatticeLike DmdType where
+  bot = botDmdType
+  top = topDmdType
+
+  pre _ _ = pprPanic "DmdType.pre" empty
+  
+  lub (DmdType fv1 ds1 r1) (DmdType fv2 ds2 r2)
+    = DmdType lub_fv2 (lub_ds ds1 ds2) (r1 `lub` r2)
+    where
+      lub_fv  = plusVarEnv_C lub fv1 fv2
+      lub_fv1 = modifyEnv (not (isBotRes r1)) (lub absDmd) fv2 fv1 lub_fv
+      lub_fv2 = modifyEnv (not (isBotRes r2)) (lub absDmd) fv1 fv2 lub_fv1
+	-- lub is the identity for Bot
+
+	-- Extend the shorter argument list to match the longer
+      lub_ds (d1:ds1) (d2:ds2) = lub d1 d2 : lub_ds ds1 ds2
+      lub_ds []	    []	     = []
+      lub_ds ds1    []	     = map (`lub` resTypeArgDmd r2) ds1
+      lub_ds []	    ds2	     = map (resTypeArgDmd r1 `lub`) ds2
+ 
+  both (DmdType fv1 ds1 r1) (DmdType fv2 _ r2)
+    = DmdType both_fv2 ds1 (r1 `both` r2)
+    where
+      both_fv  = plusVarEnv_C both fv1 fv2
+      both_fv1 = modifyEnv (isBotRes r1) (`both` bot) fv2 fv1 both_fv
+      both_fv2 = modifyEnv (isBotRes r2) (`both` bot) fv1 fv2 both_fv1
+
+
 instance Outputable DmdType where
   ppr (DmdType fv ds res) 
     = hsep [text "DmdType",
@@ -668,6 +714,21 @@ deferType (DmdType fv _ _) = DmdType (deferEnv fv) [] top
 
 deferEnv :: DmdEnv -> DmdEnv
 deferEnv fv = mapVarEnv defer fv
+
+modifyEnv :: Bool			-- No-op if False
+	  -> (Demand -> Demand)		-- The zapper
+	  -> DmdEnv -> DmdEnv		-- Env1 and Env2
+	  -> DmdEnv -> DmdEnv		-- Transform this env
+	-- Zap anything in Env1 but not in Env2
+	-- Assume: dom(env) includes dom(Env1) and dom(Env2)
+modifyEnv need_to_modify zapper env1 env2 env
+  | need_to_modify = foldr zap env (varEnvKeys (env1 `minusUFM` env2))
+  | otherwise	   = env
+  where
+    zap uniq env = addToUFM_Directly env uniq (zapper current_val)
+		 where
+		   current_val = expectJust "modifyEnv" (lookupUFM_Directly env uniq)
+
 \end{code}
 
 %************************************************************************
