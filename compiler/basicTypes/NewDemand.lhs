@@ -23,7 +23,7 @@ module NewDemand (
         seqStrDmd, seqStrDmdList, seqAbsDmd, seqAbsDmdList,
         seqDemand, seqDemandList, seqDmdType, seqStrictSig, 
         evalDmd, vanillaCall, isStrictDmd, splitCallDmd, splitDmdTy,
-        defer, deferType, deferEnv, 
+        defer, deferType, deferEnv, modifyEnv,
         isProdDmd, isPolyDmd, replicateDmd, splitProdDmd, peelCallDmd, mkCallDmd
 
      ) where
@@ -312,7 +312,7 @@ isPolyAbsDmd _        = False
 
 \begin{code}
 
-data JointDmd = JD { str :: StrDmd, abs :: AbsDmd } 
+data JointDmd = JD { strD :: StrDmd, absD :: AbsDmd } 
   deriving ( Eq, Show )
 
 -- Pretty-printing
@@ -328,11 +328,10 @@ mkJointDmd s a
 
 mkProdDmd :: [JointDmd] -> JointDmd
 mkProdDmd dx 
-  = ASSERT( length sx == length ux)
-    mkJointDmd sp up 
+  = mkJointDmd sp up 
   where
-    sp = strProd $ map str dx
-    up = absProd $ map abs dx   
+    sp = strProd $ map strD dx
+    up = absProd $ map absD dx   
      
 instance LatticeLike JointDmd where
   bot                        = mkJointDmd bot bot

@@ -30,6 +30,7 @@ import VarEnv
 import BasicTypes	
 import FastString
 import Data.List
+import DataCon		( dataConTyCon, dataConRepStrictness )
 import Id
 import CoreUtils	( exprIsHNF, exprIsTrivial )
 import PprCore	
@@ -40,6 +41,9 @@ import Type
 import Coercion         ( coercionKind )
 import Util
 import Maybes		( orElse )
+import TysWiredIn	( unboxedPairDataCon )
+import TysPrim		( realWorldStatePrimTy )
+
 
 -- import Var		( Var, isTyVar )
 -- import Util
@@ -48,9 +52,7 @@ import Maybes		( orElse )
 -- import Coercion		( isCoVarType )
 -- import CoreUtils	( exprIsHNF, exprIsTrivial )
 -- import CoreArity	( exprArity )
--- import DataCon		( dataConTyCon, dataConRepStrictness )
 -- import TyCon		( isProductTyCon, isRecursiveTyCon )
--- import TysWiredIn	( unboxedPairDataCon )
 -- import TysPrim		( realWorldStatePrimTy )
 -- import UniqFM		( addToUFM_Directly, lookupUFM_Directly,
 -- 			  minusUFM, filterUFM )
@@ -245,7 +247,7 @@ dmdAnal env dmd (Case scrut case_bndr ty [alt@(DataAlt dc, _, _)])
 
 	alt_dmd 	   = mkProdDmd [nd_idDemandInfo b | b <- bndrs', isId b]
         scrut_dmd 	   = alt_dmd `both`
-			     idDemandInfo case_bndr'
+			     nd_idDemandInfo case_bndr'
 
 	(scrut_ty, scrut') = dmdAnal env scrut_dmd scrut
         res_ty             = alt_ty1 `both` scrut_ty
@@ -257,7 +259,57 @@ dmdAnal env dmd (Case scrut case_bndr ty [alt@(DataAlt dc, _, _)])
     (res_ty, Case scrut' case_bndr' ty [alt'])
 
 
-dmdAnal _ _ _  = undefined
+dmdAnal env dmd (Case scrut case_bndr ty alts)
+  = let
+	(alt_tys, alts')        = mapAndUnzip (dmdAnalAlt env dmd) alts
+	(scrut_ty, scrut')      = dmdAnal env evalDmd scrut
+	(alt_ty, case_bndr')	= annotateBndr (foldr lub botDmdType alt_tys) case_bndr
+        res_ty                  = alt_ty `both` scrut_ty
+    in
+--    pprTrace "dmdAnal:Case2" (vcat [ text "scrut" <+> ppr scrut
+--                                   , text "scrut_ty" <+> ppr scrut_ty
+--                                   , text "alt_ty" <+> ppr alt_ty
+--                                   , text "res_ty" <+> ppr res_ty ]) $
+    (res_ty, Case scrut' case_bndr' ty alts')
+
+dmdAnal env dmd (Let (NonRec id rhs) body)
+  = let
+	(sigs', lazy_fv, (id1, rhs')) = dmdAnalRhs NotTopLevel NonRecursive env (id, rhs)
+	(body_ty, body') 	      = dmdAnal (updSigEnv env sigs') dmd body
+	(body_ty1, id2)    	      = annotateBndr body_ty id1
+	body_ty2		      = addLazyFVs body_ty1 lazy_fv
+    in
+	-- If the actual demand is better than the vanilla call
+	-- demand, you might think that we might do better to re-analyse 
+	-- the RHS with the stronger demand.
+	-- But (a) That seldom happens, because it means that *every* path in 
+	-- 	   the body of the let has to use that stronger demand
+	-- (b) It often happens temporarily in when fixpointing, because
+	--     the recursive function at first seems to place a massive demand.
+	--     But we don't want to go to extra work when the function will
+	--     probably iterate to something less demanding.  
+	-- In practice, all the times the actual demand on id2 is more than
+	-- the vanilla call demand seem to be due to (b).  So we don't
+	-- bother to re-analyse the RHS.
+    (body_ty2, Let (NonRec id2 rhs') body')    
+
+dmdAnal env dmd (Let (Rec pairs) body)
+  = let
+	bndrs			 = map fst pairs
+	(sigs', lazy_fv, pairs') = dmdFix NotTopLevel env pairs
+	(body_ty, body')         = dmdAnal (updSigEnv env sigs') dmd body
+	body_ty1		 = addLazyFVs body_ty lazy_fv
+    in
+    sigs' `seq` body_ty `seq`
+    let
+	(body_ty2, _) = annotateBndrs body_ty1 bndrs
+		-- Don't bother to add demand info to recursive
+		-- binders as annotateBndr does; 
+		-- being recursive, we can't treat them strictly.
+		-- But we do need to remove the binders from the result demand env
+    in
+    (body_ty2,  Let (Rec pairs') body')
+
 
 dmdAnalAlt :: AnalEnv -> Demand -> Alt Var -> (DmdType, Alt Var)
 dmdAnalAlt env dmd (con,bndrs,rhs)
@@ -297,7 +349,7 @@ addDataConPatDmds (LitAlt _) _ dmd_ty = dmd_ty
 addDataConPatDmds (DataAlt con) bndrs dmd_ty
   = foldr add dmd_ty str_bndrs 
   where
-    add bndr dmd_ty = addVarDmd dmd_ty bndr seqDmd
+    add bndr dmd_ty = addVarDmd dmd_ty bndr absDmd
     str_bndrs = [ b | (b,s) <- zipEqual "addDataConPatBndrs"
                                    (filter isId bndrs)
                                    (dataConRepStrictness con)
@@ -489,6 +541,39 @@ addVarDmd :: DmdType -> Var -> Demand -> DmdType
 addVarDmd (DmdType fv ds res) var dmd
   = DmdType (extendVarEnv_C both fv var dmd) ds res
 
+addLazyFVs :: DmdType -> DmdEnv -> DmdType
+addLazyFVs (DmdType fv ds res) lazy_fvs
+  = DmdType both_fv1 ds res
+  where
+    both_fv = plusVarEnv_C both fv lazy_fvs
+    both_fv1 = modifyEnv (isBotRes res) (`both` bot) lazy_fvs fv both_fv
+	-- This modifyEnv is vital.  Consider
+	--	let f = \x -> (x,y)
+	--	in  error (f 3)
+	-- Here, y is treated as a lazy-fv of f, but we must `both` that L
+	-- demand with the bottom coming up from 'error'
+	-- 
+	-- I got a loop in the fixpointer without this, due to an interaction
+	-- with the lazy_fv filtering in mkSigTy.  Roughly, it was
+	--	letrec f n x 
+	--	    = letrec g y = x `fatbar` 
+	--			   letrec h z = z + ...g...
+	--			   in h (f (n-1) x)
+	-- 	in ...
+	-- In the initial iteration for f, f=Bot
+	-- Suppose h is found to be strict in z, but the occurrence of g in its RHS
+	-- is lazy.  Now consider the fixpoint iteration for g, esp the demands it
+	-- places on its free variables.  Suppose it places none.  Then the
+	-- 	x `fatbar` ...call to h...
+	-- will give a x->V demand for x.  That turns into a L demand for x,
+	-- which floats out of the defn for h.  Without the modifyEnv, that
+	-- L demand doesn't get both'd with the Bot coming up from the inner
+	-- call to f.  So we just get an L demand for x for g.
+	--
+	-- A better way to say this is that the lazy-fv filtering should give the
+	-- same answer as putting the lazy fv demands in the function's type.
+
+
 removeFV :: DmdEnv -> Var -> DmdResult -> (DmdEnv, Demand)
 removeFV fv id res = (fv', dmd)
 		where
@@ -503,7 +588,7 @@ annotateBndr :: DmdType -> Var -> (DmdType, Var)
 -- No effect on the argument demands
 annotateBndr dmd_ty@(DmdType fv ds res) var
   | isTyVar var = (dmd_ty, var)
-  | otherwise   = (DmdType fv' ds res, setIdDemandInfo var dmd)
+  | otherwise   = (DmdType fv' ds res, nd_setIdDemandInfo var dmd)
   where
     (fv', dmd) = removeFV fv var res
 
