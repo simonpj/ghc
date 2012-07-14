@@ -112,11 +112,10 @@ dmdAnalTopBind sigs (Rec pairs)
 \begin{code}
 dmdAnal :: AnalEnv -> Demand -> CoreExpr -> (DmdType, CoreExpr)
 
-dmdAnal _ dmd e | isTop(dmd)
+dmdAnal _ dmd e | isTop(dmd) || isTop(dmd)
   -- top demand does not provide any way to infer something interesting 
   = (topDmdType, e)
 
---Ilya: Why?!
 dmdAnal env dmd e
   | not (isStrictDmd dmd)
   = let (res_ty, e') = dmdAnal env evalDmd e
@@ -523,7 +522,7 @@ dmdAnalRhs top_lvl rec_flag env (id, rhs)
                        -- in which case we should not complain. 
 		       mkSigTy top_lvl rec_flag id rhs rhs_dmd_ty
   id'		     = id `nd_setIdStrictness` sig_ty
-  sigs'		     = extendSigEnv top_lvl (sigEnv env) id' sig_ty
+  sigs'		     = extendSigEnv top_lvl (sigEnv env) id sig_ty
 
 \end{code}
 

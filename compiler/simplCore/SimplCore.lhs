@@ -198,7 +198,10 @@ getCoreToDo dflags
                     ])
     
     -- so far, do nothing
-    new_demand_phases = CoreDoNewStrictness
+    new_demand_phases = (CoreDoPasses [
+                           CoreDoNewStrictness,
+                           CoreDoPrintCore
+                         ])
 
     core_todo =
      if opt_level == 0 then
