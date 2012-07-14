@@ -748,7 +748,7 @@ mkPrimOpId :: PrimOp -> Id
 mkPrimOpId prim_op 
   = id
   where
-    (tyvars,arg_tys,res_ty, arity, strict_sig, _nd_strict_sig) = primOpSig prim_op
+    (tyvars,arg_tys,res_ty, arity, strict_sig, nd_strict_sig) = primOpSig prim_op
     ty   = mkForAllTys tyvars (mkFunTys arg_tys res_ty)
     name = mkWiredInName gHC_PRIM (primOpOcc prim_op) 
                          (mkPrimOpIdUnique (primOpTag prim_op))
@@ -759,7 +759,7 @@ mkPrimOpId prim_op
            `setSpecInfo`          mkSpecInfo (primOpRules prim_op name)
            `setArityInfo`         arity
            `setStrictnessInfo`    Just strict_sig
---           `nd_setStrictnessInfo` Just nd_strict_sig
+           `nd_setStrictnessInfo` Just nd_strict_sig
 
 -- For each ccall we manufacture a separate CCallOpId, giving it
 -- a fresh unique, a type that is correct for this particular ccall,
