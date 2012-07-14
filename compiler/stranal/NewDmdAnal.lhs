@@ -12,18 +12,13 @@
 module NewDmdAnal ( dmdAnalProgram, 
                     -- dmdAnalTopRhs,
 		    -- both {- needed by WwLib -}
-
-                    -- todo cleanup
-                    dmdAnal,    
-                    emptySigEnv, updSigEnv, sigEnv,
-                    addInitialSigs, lookupSigEnv, extendSigEnv, extendAnalEnv,
-                    virgin, nonVirgin,
                   ) where
 
 #include "HsVersions.h"
 
 import DynFlags		( DynFlags )
 import NewDemand	-- All of it
+import Var		( isTyVar )
 import CoreSyn
 import Outputable
 import VarEnv
@@ -34,32 +29,15 @@ import DataCon		( dataConTyCon, dataConRepStrictness )
 import Id
 import CoreUtils	( exprIsHNF, exprIsTrivial )
 import PprCore	
-import UniqFM	
+import UniqFM		( filterUFM )
 import TyCon
 import Pair
-import Type
+import Type		( eqType, tyConAppTyCon_maybe )
 import Coercion         ( coercionKind )
 import Util
 import Maybes		( orElse )
 import TysWiredIn	( unboxedPairDataCon )
 import TysPrim		( realWorldStatePrimTy )
-
-
--- import Var		( Var, isTyVar )
--- import Util
--- import PprCore
--- import StaticFlags	( opt_MaxWorkerArgs )
--- import Coercion		( isCoVarType )
--- import CoreUtils	( exprIsHNF, exprIsTrivial )
--- import CoreArity	( exprArity )
--- import TyCon		( isProductTyCon, isRecursiveTyCon )
--- import TysPrim		( realWorldStatePrimTy )
--- import UniqFM		( addToUFM_Directly, lookupUFM_Directly,
--- 			  minusUFM, filterUFM )
--- import Type		( isUnLiftedType, eqType, tyConAppTyCon_maybe )
--- import Pair
-
-
 
 \end{code}
 
@@ -256,7 +234,6 @@ dmdAnal env dmd (Case scrut case_bndr ty [alt@(DataAlt dc, _, _)])
 --                                  , text "alt_ty" <+> ppr alt_ty1
 --                                  , text "res_ty" <+> ppr res_ty ]) $
     (res_ty, Case scrut' case_bndr' ty [alt'])
-
 
 dmdAnal env dmd (Case scrut case_bndr ty alts)
   = let
@@ -578,9 +555,22 @@ removeFV fv id res = (fv', dmd)
 		where
 		  fv' = fv `delVarEnv` id
 		  dmd = lookupVarEnv fv id `orElse` deflt
+                  -- See note [Default demand for variables]
 	 	  deflt | isBotRes res = bot
 		        | otherwise    = absDmd
+\end{code}
 
+Note [Default demand for variables]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If the variable is not mentioned in the environment of a demand type,
+its demant is taken to be a result demand of the type: either L or the
+bottom. Both are safe from the semantical pont of view, however, for
+the safe result we also have absent demand set to Abs, which makes it
+possible to safely ignore non-mentioned variables (their joint demand
+is <L,A>).
+
+\begin{code}
 annotateBndr :: DmdType -> Var -> (DmdType, Var)
 -- The returned env has the var deleted
 -- The returned var is annotated with demand info
