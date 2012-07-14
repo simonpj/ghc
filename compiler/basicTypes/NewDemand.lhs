@@ -518,8 +518,8 @@ data DmdResult = DR { res :: PureResult, cpr :: CPRResult }
      deriving ( Eq )
 
 instance LatticeLike DmdResult where
-  bot                        = topRes
-  top                        = botRes
+  bot                        = botRes
+  top                        = topRes
 
   pre x _ | x == bot         = True
   pre _ x | x == top         = True
