@@ -428,7 +428,7 @@ replicateDmd n (JD x y) = zipWith JD (replicateStrDmd n x)
 -- Check whether is a product demand
 isProdDmd :: Demand -> Bool
 isProdDmd (JD (SProd _) _) = True
-isProdDmd (JD _ (UProd _)) = True
+isProdDmd (JD s (UProd _)) = s /= top
 isProdDmd _                = False
 
 isPolyDmd :: Demand -> Bool
@@ -569,7 +569,7 @@ isBotRes _                  = False
 
 returnsCPR :: DmdResult -> Bool
 returnsCPR (DR TopRes RetCPR) = True
-returnsCPR _      = False
+returnsCPR _                  = False
 
 resTypeArgDmd :: DmdResult -> Demand
 -- TopRes and BotRes are polymorphic, so that
