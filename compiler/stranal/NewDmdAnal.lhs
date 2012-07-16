@@ -78,7 +78,6 @@ dmdAnalTopBind sigs (Rec pairs)
 		-- We get two iterations automatically
 		-- c.f. the NonRec case above
 
-
 \end{code}
 
 %************************************************************************
@@ -90,7 +89,7 @@ dmdAnalTopBind sigs (Rec pairs)
 \begin{code}
 dmdAnal :: AnalEnv -> Demand -> CoreExpr -> (DmdType, CoreExpr)
 
-dmdAnal _ dmd e | isTop(dmd) || isTop(dmd)
+dmdAnal _ dmd e | isAbs(dmd)
   -- top demand does not provide any way to infer something interesting 
   = (topDmdType, e)
 
@@ -158,6 +157,7 @@ dmdAnal env dmd (App fun arg)	-- Non-type arguments
 	(arg_ty, arg') 	  = dmdAnal env arg_dmd arg
 	(arg_dmd, res_ty) = splitDmdTy fun_ty
     in
+    -- pprTrace "dmdAnal" (ppr arg $$ ppr fun_ty $$ ppr res_ty $$ ppr arg_ty) $
     (res_ty `both` arg_ty, App fun' arg')
 
 dmdAnal env dmd (Lam var body)
@@ -381,8 +381,7 @@ dmdTransform env var dmd
 ------ 	IMPORTED FUNCTION
   | isGlobalId var,		-- Imported function
     let StrictSig dmd_ty = nd_idStrictness var
-  = -- pprTrace "strict-sig" (ppr var $$ ppr dmd_ty) $
-    if dmdTypeDepth dmd_ty <= call_depth then	-- Saturated, so unleash the demand
+  = if dmdTypeDepth dmd_ty <= call_depth then	-- Saturated, so unleash the demand
 	dmd_ty
     else
 	topDmdType
@@ -497,7 +496,7 @@ dmdAnalRhs top_lvl rec_flag env (id, rhs)
   (lazy_fv, sig_ty)  = WARN( arity /= dmdTypeDepth rhs_dmd_ty && not (exprIsTrivial rhs), ppr id )
                        -- The RHS can be eta-reduced to just a variable, 
                        -- in which case we should not complain. 
-		       mkSigTy top_lvl rec_flag id rhs rhs_dmd_ty
+		       mkSigTy top_lvl rec_flag env id rhs rhs_dmd_ty
   id'		     = id `nd_setIdStrictness` sig_ty
   sigs'		     = extendSigEnv top_lvl (sigEnv env) id sig_ty
 
@@ -511,7 +510,8 @@ dmdAnalRhs top_lvl rec_flag env (id, rhs)
 
 \begin{code}
 unitVarDmd :: Var -> Demand -> DmdType
-unitVarDmd var dmd = DmdType (unitVarEnv var dmd) [] top
+unitVarDmd var dmd 
+  = DmdType (unitVarEnv var dmd) [] top
 
 addVarDmd :: DmdType -> Var -> Demand -> DmdType
 addVarDmd (DmdType fv ds res) var dmd
@@ -557,7 +557,7 @@ removeFV fv id res = (fv', dmd)
 		  dmd = lookupVarEnv fv id `orElse` deflt
                   -- See note [Default demand for variables]
 	 	  deflt | isBotRes res = bot
-		        | otherwise    = absDmd -- why not top?
+		        | otherwise    = absDmd
 \end{code}
 
 Note [Default demand for variables]
@@ -608,8 +608,9 @@ annotateLamIdBndr env (DmdType fv ds res) id
 
     (fv', dmd) = removeFV fv id res
 
-mkSigTy :: TopLevelFlag -> RecFlag -> Id -> CoreExpr -> DmdType -> (DmdEnv, StrictSig)
-mkSigTy top_lvl rec_flag id rhs dmd_ty 
+mkSigTy :: TopLevelFlag -> RecFlag -> AnalEnv -> Id -> 
+           CoreExpr -> DmdType -> (DmdEnv, StrictSig)
+mkSigTy top_lvl rec_flag env id rhs dmd_ty 
   = mk_sig_ty thunk_cpr_ok rhs dmd_ty
   where
     id_dmd = nd_idDemandInfo id
@@ -617,12 +618,13 @@ mkSigTy top_lvl rec_flag id rhs dmd_ty
     -- is it okay or not to assign CPR 
     -- (not okay in the first pass)
     thunk_cpr_ok   -- See Note [CPR for thunks]
-	| isTopLevel top_lvl       = False	-- Top level things don't get
+        | isTopLevel top_lvl       = False	-- Top level things don't get
 						-- their demandInfo set at all
 	| isRec rec_flag	   = False	-- Ditto recursive things
+	| ae_virgin env            = True       -- Optimistic, first time round
+						-- See note []
 	| isStrictDmd id_dmd       = True
-	| otherwise 		   = True	-- Optimistic, first time round
-						-- See notes below
+	| otherwise 		   = False	
 
 mk_sig_ty :: Bool -> CoreExpr -> DmdType -> (DmdEnv, StrictSig)
 mk_sig_ty thunk_cpr_ok rhs (DmdType fv dmds res) 
@@ -705,7 +707,7 @@ have a CPR in it or not.  Simple solution:
 
 NB: strictly_demanded is never true of a top-level Id, or of a recursive Id.
 
-Note [Optimistic in the Nothing case]
+Note [Optimistic in the "virgin" case]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Demand info now has a 'Nothing' state, just like strictness info.
 The analysis works from 'dangerous' towards a 'safe' state; so we 
@@ -881,6 +883,7 @@ extendSigsWithLam env id
   = if (ae_virgin env) || (isProdDmd $ nd_idDemandInfo id)
     then extendAnalEnv NotTopLevel env id cprSig
     else env
+
 \end{code}
 
 Note [Initialising strictness]

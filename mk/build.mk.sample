@@ -30,6 +30,10 @@
 # A development build, working on the stage 2 compiler:
 #BuildFlavour = devel2
 
+# A development build, working on the stage 2 compiler, 
+# including compilation with new demand signatures:
+#BuildFlavour = newdmd
+
 # An unregisterised, optimised build of ghc, for porting:
 #BuildFlavour = unreg
 
@@ -164,6 +168,23 @@ LAX_DEPENDENCIES   = YES
 # you comment the line again.  This is a useful trick for when you're
 # working on stage 2 and want to freeze stage 1 and the libraries for
 # a while.
+
+endif
+
+# -------- A Development build (stage 2 + new demand signatures) -------------
+
+ifeq "$(BuildFlavour)" "newdmd"
+
+SRC_HC_OPTS        = -H64m -O -fasm
+GhcLibHcOpts       = -O -dcore-lint -XNewDemandAnalyser
+GhcStage1HcOpts    = -Rghc-timing -O -fasm 
+GhcStage2HcOpts    = -Rghc-timing -O0 -DDEBUG -Werror
+SplitObjs          = NO
+HADDOCK_DOCS       = NO
+BUILD_DOCBOOK_HTML = NO
+BUILD_DOCBOOK_PS   = NO
+BUILD_DOCBOOK_PDF  = NO
+LAX_DEPENDENCIES   = YES
 
 endif
 

@@ -197,7 +197,13 @@ getCoreToDo dflags
                        simpl_phase 0 ["post-worker-wrapper"] max_iter
                     ])
     
-    new_demand_phases = CoreDoNewStrictness
+    -- plug in new demand analyser
+    new_demand_phases = (CoreDoPasses [
+                           CoreDoStrictness,
+                           CoreDoNewStrictness,
+                           CoreDoWorkerWrapper,
+                           simpl_phase 0 ["post-worker-wrapper"] max_iter
+                        ])
 
     core_todo =
      if opt_level == 0 then

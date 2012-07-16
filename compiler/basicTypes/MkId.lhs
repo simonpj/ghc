@@ -340,7 +340,7 @@ mkDataConIds wrap_name wkr_name data_con
     nd_wrap_sig = ND.mkStrictSig (ND.mkTopDmdType nd_wrap_arg_dmds nd_cpr_info)
     nd_wrap_arg_dmds = map nd_mk_dmd wrap_stricts
     nd_mk_dmd str | isBanged str = ND.evalDmd
-                  | otherwise    = ND.absDmd 
+                  | otherwise    = ND.top
 
         -- The Cpr info can be important inside INLINE rhss, where the
         -- wrapper constructor isn't inlined.

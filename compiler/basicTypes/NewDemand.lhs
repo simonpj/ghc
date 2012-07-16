@@ -398,7 +398,7 @@ vanillaCall n =
    in mkJointDmd strComp absTop
 
 defer :: Demand -> Demand
-defer (JD _ a) = (JD bot a)
+defer (JD _ a) = (JD top a)
 
 \end{code}
 
@@ -563,7 +563,7 @@ isTopRes (DR TopRes NoCPR)  = True
 isTopRes _                  = False
 
 isBotRes :: DmdResult -> Bool
-isBotRes (DR BotRes RetCPR) = True
+isBotRes (DR BotRes _)      = True
 isBotRes _                  = False
 
 returnsCPR :: DmdResult -> Bool
@@ -640,13 +640,20 @@ instance LatticeLike DmdType where
   top = topDmdType
 
   pre _ _ = pprPanic "DmdType.pre" empty
-  
+
   lub (DmdType fv1 ds1 r1) (DmdType fv2 ds2 r2)
     = DmdType lub_fv2 (lub_ds ds1 ds2) (r1 `lub` r2)
+    -- Consider (if x then y else []) with demand V
+    -- Then the first branch gives {y->V} and the second
+    --  *implicitly* has {y->A}.  So we must put {y->(V `lub` A)}
+    -- in the result env.
     where
+      absLub  = lub absDmd
       lub_fv  = plusVarEnv_C lub fv1 fv2
-      lub_fv1 = modifyEnv (not (isBotRes r1)) (lub absDmd) fv2 fv1 lub_fv
-      lub_fv2 = modifyEnv (not (isBotRes r2)) (lub absDmd) fv1 fv2 lub_fv1
+      -- TODO: write down an example
+      -- TODO: compute a lub-candidate from r1 and r2
+      lub_fv1 = modifyEnv (not (isBotRes r1)) absLub fv2 fv1 lub_fv
+      lub_fv2 = modifyEnv (not (isBotRes r2)) absLub fv1 fv2 lub_fv1
 	-- lub is the identity for Bot
 
 	-- Extend the shorter argument list to match the longer
