@@ -621,8 +621,8 @@ mkSigTy top_lvl rec_flag env id rhs dmd_ty
         | isTopLevel top_lvl       = False	-- Top level things don't get
 						-- their demandInfo set at all
 	| isRec rec_flag	   = False	-- Ditto recursive things
-	| ae_virgin env            = True       -- Optimistic, first time round
-						-- See note []
+        | ae_virgin env            = True       -- Optimistic, first time round
+        -- See Note [Optimistic CPR in the "virgin" case]
 	| isStrictDmd id_dmd       = True
 	| otherwise 		   = False	
 
@@ -707,8 +707,8 @@ have a CPR in it or not.  Simple solution:
 
 NB: strictly_demanded is never true of a top-level Id, or of a recursive Id.
 
-Note [Optimistic in the "virgin" case]
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 
+Note [Optimistic CPR in the "virgin" case]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 
 
 Demand and strictness info are initialized by top elements. However,
 this prevents from inferring a CPR property in the first pass of the
@@ -878,7 +878,7 @@ extendSigsWithLam :: AnalEnv -> Id -> AnalEnv
 -- definitely has product type, else we may get over-optimistic 
 -- CPR results (e.g. from \x -> x!).
 
--- See Note [Optimistic in the "virgin" case]
+-- See Note [Optimistic CPR in the "virgin" case]
 extendSigsWithLam env id
   = if (ae_virgin env) || (isProdDmd $ nd_idDemandInfo id)
     then extendAnalEnv NotTopLevel env id cprSig
