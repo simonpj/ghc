@@ -280,6 +280,13 @@ mkDataConIds wrap_name wkr_name data_con
                wkr_arity > 0        &&
                wkr_arity <= mAX_CPR_SIZE        = retCPR
              | otherwise                        = TopRes
+
+    nd_cpr_info | isProductTyCon tycon && 
+                  isDataTyCon tycon    &&
+                  wkr_arity > 0        &&
+                  wkr_arity <= mAX_CPR_SIZE        = ND.cprRes
+                | otherwise                        = ND.topRes
+
         -- RetCPR is only true for products that are real data types;
         -- that is, not unboxed tuples or [non-recursive] newtypes
 
@@ -317,7 +324,8 @@ mkDataConIds wrap_name wkr_name data_con
                         -- applications are treated as values
 		    `setInlinePragInfo`    alwaysInlinePragma
                     `setUnfoldingInfo`     wrap_unf
-                    `setStrictnessInfo` Just wrap_sig
+                    `setStrictnessInfo`    Just wrap_sig
+                    `nd_setStrictnessInfo` Just nd_wrap_sig
                         -- We need to get the CAF info right here because TidyPgm
                         -- does not tidy the IdInfo of implicit bindings (like the wrapper)
                         -- so it not make sure that the CAF info is sane
@@ -328,6 +336,12 @@ mkDataConIds wrap_name wkr_name data_con
     wrap_arg_dmds = map mk_dmd wrap_stricts
     mk_dmd str | isBanged str = evalDmd
                | otherwise    = lazyDmd
+
+    nd_wrap_sig = ND.mkStrictSig (ND.mkTopDmdType nd_wrap_arg_dmds nd_cpr_info)
+    nd_wrap_arg_dmds = map nd_mk_dmd wrap_stricts
+    nd_mk_dmd str | isBanged str = ND.evalDmd
+                  | otherwise    = ND.absDmd
+
         -- The Cpr info can be important inside INLINE rhss, where the
         -- wrapper constructor isn't inlined.
         -- And the argument strictness can be important too; we
@@ -448,10 +462,11 @@ mkDictSelId no_unf name clas
         -- to get (say)         C a -> (a -> a)
 
     base_info = noCafIdInfo
-                `setArityInfo`      1
-                `setStrictnessInfo` Just strict_sig
-                `setUnfoldingInfo`  (if no_unf then noUnfolding
-	                             else mkImplicitUnfolding rhs)
+                `setArityInfo`         1
+                `setStrictnessInfo`    Just strict_sig
+                `nd_setStrictnessInfo` Just nd_strict_sig
+                `setUnfoldingInfo`     (if no_unf then noUnfolding
+	                                else mkImplicitUnfolding rhs)
 		   -- In module where class op is defined, we must add
 		   -- the unfolding, even though it'll never be inlined
 		   -- becuase we use that to generate a top-level binding
@@ -481,12 +496,17 @@ mkDictSelId no_unf name clas
         -- It's worth giving one, so that absence info etc is generated
         -- even if the selector isn't inlined
 
-    -- [newdmd] -- which demand 
     strict_sig = mkStrictSig (mkTopDmdType [arg_dmd] TopRes)
     
     arg_dmd | new_tycon = evalDmd
             | otherwise = Eval (Prod [ if the_arg_id == id then evalDmd else Abs
                                      | id <- arg_ids ])
+
+    nd_strict_sig = ND.mkStrictSig (ND.mkTopDmdType [nd_arg_dmd] ND.topRes)
+    nd_arg_dmd | new_tycon = ND.evalDmd
+               | otherwise = ND.mkProdDmd [ if the_arg_id == id then ND.evalDmd else ND.absDmd
+                                          | id <- arg_ids ]
+
 
     tycon      	   = classTyCon clas
     new_tycon  	   = isNewTyCon tycon

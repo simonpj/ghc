@@ -574,6 +574,7 @@ is <L,A>).
 annotateBndr :: DmdType -> Var -> (DmdType, Var)
 -- The returned env has the var deleted
 -- The returned var is annotated with demand info
+-- according to the result demand of the provided demand type
 -- No effect on the argument demands
 annotateBndr dmd_ty@(DmdType fv ds res) var
   | isTyVar var = (dmd_ty, var)
