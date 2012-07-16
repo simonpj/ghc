@@ -557,7 +557,7 @@ removeFV fv id res = (fv', dmd)
 		  dmd = lookupVarEnv fv id `orElse` deflt
                   -- See note [Default demand for variables]
 	 	  deflt | isBotRes res = bot
-		        | otherwise    = absDmd
+		        | otherwise    = top -- used to be absDmd
 \end{code}
 
 Note [Default demand for variables]

@@ -694,8 +694,8 @@ cprDmdType = DmdType emptyDmdEnv [] cprRes
 isTopDmdType :: DmdType -> Bool
 -- Only used on top-level types, hence the assert
 isTopDmdType (DmdType env [] res)
-             | isTopRes res          = ASSERT( isEmptyVarEnv env) True	
-isTopDmdType _                       = False
+             | isTopRes res && isEmptyVarEnv env = True	
+isTopDmdType _                                   = False
 
 mkDmdType :: DmdEnv -> [Demand] -> DmdResult -> DmdType
 mkDmdType fv ds res = DmdType fv ds res

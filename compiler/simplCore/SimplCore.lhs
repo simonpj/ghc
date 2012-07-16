@@ -197,11 +197,7 @@ getCoreToDo dflags
                        simpl_phase 0 ["post-worker-wrapper"] max_iter
                     ])
     
-    -- so far, do nothing
-    new_demand_phases = (CoreDoPasses [
-                           CoreDoNewStrictness,
-                           CoreDoPrintCore
-                         ])
+    new_demand_phases = CoreDoNewStrictness
 
     core_todo =
      if opt_level == 0 then

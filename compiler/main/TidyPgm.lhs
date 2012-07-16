@@ -21,7 +21,8 @@ import CorePrep
 import CoreUtils
 import Literal
 import Rules
-import CoreArity        ( exprArity, exprBotStrictness_maybe )
+import CoreArity        ( exprArity, exprBotStrictness_maybe,
+                          nd_exprBotStrictness_maybe )
 import VarEnv
 import VarSet
 import Var
@@ -30,6 +31,7 @@ import IdInfo
 import InstEnv
 import FamInstEnv
 import Demand
+import qualified NewDemand as ND ( appIsBottom )
 import BasicTypes
 import Name hiding (varName)
 import NameSet
@@ -1142,12 +1144,14 @@ tidyTopIdInfo rhs_tidy_env name orig_rhs tidy_rhs idinfo show_unfold caf_info
         `setCafInfo`        caf_info
         `setArityInfo`      arity
         `setStrictnessInfo` final_sig
+        `nd_setStrictnessInfo` nd_final_sig
 
   | otherwise           -- Externally-visible Ids get the whole lot
   = vanillaIdInfo
         `setCafInfo`           caf_info
         `setArityInfo`         arity
         `setStrictnessInfo`    final_sig
+        `nd_setStrictnessInfo` nd_final_sig
         `setOccInfo`           robust_occ_info
         `setInlinePragInfo`    (inlinePragInfo idinfo)
         `setUnfoldingInfo`     unfold_info
@@ -1167,6 +1171,12 @@ tidyTopIdInfo rhs_tidy_env name orig_rhs tidy_rhs idinfo show_unfold caf_info
               | Just (_, sig) <- mb_bot_str = Just sig
               | otherwise                   = Nothing
 
+    nd_final_sig | Just sig <- nd_strictnessInfo idinfo
+                 = WARN( _nd_bottom_hidden sig, ppr name ) Just sig
+                 | Just (_, sig) <- nd_mb_bot_str = Just sig
+                 | otherwise                      = Nothing
+
+
     -- If the cheap-and-cheerful bottom analyser can see that
     -- the RHS is bottom, it should jolly well be exposed
     _bottom_hidden id_sig = case mb_bot_str of
@@ -1174,6 +1184,12 @@ tidyTopIdInfo rhs_tidy_env name orig_rhs tidy_rhs idinfo show_unfold caf_info
                                Just (arity, _) -> not (appIsBottom id_sig arity)
 
     mb_bot_str = exprBotStrictness_maybe orig_rhs
+
+    _nd_bottom_hidden id_sig = case nd_mb_bot_str of
+                                  Nothing         -> False
+                                  Just (arity, _) -> not (ND.appIsBottom id_sig arity)
+
+    nd_mb_bot_str = nd_exprBotStrictness_maybe orig_rhs
 
     --------- Unfolding ------------
     unf_info = unfoldingInfo idinfo

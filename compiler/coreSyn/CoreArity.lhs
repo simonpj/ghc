@@ -16,6 +16,7 @@
 -- | Arit and eta expansion
 module CoreArity (
 	manifestArity, exprArity, exprBotStrictness_maybe,
+        nd_exprBotStrictness_maybe, 
 	exprEtaExpandArity, CheapFun, etaExpand
     ) where
 
@@ -26,6 +27,7 @@ import CoreFVs
 import CoreUtils
 import CoreSubst
 import Demand
+import qualified NewDemand as ND
 import Var
 import VarEnv
 import Id
@@ -135,6 +137,19 @@ exprBotStrictness_maybe e
   where
     env = AE { ae_bndrs = [], ae_ped_bot = True, ae_cheap_fn = \ _ _ -> False }
                   -- For this purpose we can be very simple
+
+nd_exprBotStrictness_maybe :: CoreExpr -> Maybe (Arity, ND.StrictSig)
+-- A cheap and cheerful function that identifies bottoming functions
+-- and gives them a suitable strictness signatures.  It's used during
+-- float-out
+nd_exprBotStrictness_maybe e
+  = case getBotArity (arityType env e) of
+	Nothing -> Nothing
+	Just ar -> Just (ar, ND.mkStrictSig (ND.mkTopDmdType (replicate ar ND.top) ND.botRes))
+  where
+    env = AE { ae_bndrs = [], ae_ped_bot = True, ae_cheap_fn = \ _ _ -> False }
+                  -- For this purpose we can be very simple
+
 \end{code}
 
 Note [exprArity invariant]
