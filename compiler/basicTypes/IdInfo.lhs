@@ -222,10 +222,10 @@ data IdInfo
 	                                        -- if there's no known demand yet, for when we are looking
 						-- for CPR info
         
-        nd_strictnessInfo :: Maybe ND.StrictSig,  -- ^ New strictness signature, the details above are 
+        nd_strictnessInfo :: ND.StrictSig,  -- ^ New strictness signature, the details above are 
                                                   -- appliccable   
 
-        nd_demandInfo   :: Maybe ND.Demand        -- ^ New ID demand information
+        nd_demandInfo     :: ND.Demand        -- ^ New ID demand information
 
     }
 
@@ -261,13 +261,11 @@ seqDemandInfo :: Maybe Demand -> ()
 seqDemandInfo Nothing    = ()
 seqDemandInfo (Just dmd) = seqDemand dmd
 
-nd_seqStrictnessInfo :: Maybe ND.StrictSig -> ()
-nd_seqStrictnessInfo Nothing = ()
-nd_seqStrictnessInfo (Just ty) = ND.seqStrictSig ty
+nd_seqStrictnessInfo :: ND.StrictSig -> ()
+nd_seqStrictnessInfo ty = ND.seqStrictSig ty
 
-nd_seqDemandInfo :: Maybe ND.JointDmd -> ()
-nd_seqDemandInfo Nothing    = ()
-nd_seqDemandInfo (Just dmd) = ND.seqDemand dmd
+nd_seqDemandInfo :: ND.JointDmd -> ()
+nd_seqDemandInfo dmd = ND.seqDemand dmd
 \end{code}
 
 Setters
@@ -308,10 +306,10 @@ setDemandInfo     info dd = dd `seq` info { demandInfo = dd }
 setStrictnessInfo :: IdInfo -> Maybe StrictSig -> IdInfo
 setStrictnessInfo info dd = dd `seq` info { strictnessInfo = dd }
 
-nd_setDemandInfo :: IdInfo -> Maybe ND.Demand -> IdInfo
+nd_setDemandInfo :: IdInfo -> ND.Demand -> IdInfo
 nd_setDemandInfo info dd = dd `seq` info { nd_demandInfo = dd }
 
-nd_setStrictnessInfo :: IdInfo -> Maybe ND.StrictSig -> IdInfo
+nd_setStrictnessInfo :: IdInfo -> ND.StrictSig -> IdInfo
 nd_setStrictnessInfo info dd = dd `seq` info { nd_strictnessInfo = dd }
 \end{code}
 
@@ -330,8 +328,8 @@ vanillaIdInfo
 	    occInfo		= NoOccInfo,
 	    demandInfo	        = Nothing,
 	    strictnessInfo      = Nothing,
-            nd_demandInfo	= Nothing,
-	    nd_strictnessInfo   = Nothing
+            nd_demandInfo	= ND.top,
+	    nd_strictnessInfo   = ND.topSig
 	   }
 
 -- | More informative 'IdInfo' we can use when we know the 'Id' has no CAF references
@@ -402,9 +400,8 @@ pprStrictness :: Maybe StrictSig -> SDoc
 pprStrictness Nothing    = empty
 pprStrictness (Just sig) = ppr sig
 
-nd_pprStrictness :: Maybe ND.StrictSig -> SDoc
-nd_pprStrictness Nothing    = empty
-nd_pprStrictness (Just sig) = ppr sig
+nd_pprStrictness :: ND.StrictSig -> SDoc
+nd_pprStrictness sig = ppr sig
 \end{code}
 
 
@@ -587,8 +584,8 @@ zapDemandInfo info@(IdInfo {demandInfo = dmd})
 
 nd_zapDemandInfo :: IdInfo -> Maybe IdInfo
 nd_zapDemandInfo info@(IdInfo {nd_demandInfo = dmd})
-  | isJust dmd = Just (info {nd_demandInfo = Nothing})
-  | otherwise  = Nothing
+  | ND.isTop dmd = Just (info {nd_demandInfo = ND.top})
+  | otherwise    = Nothing
 \end{code}
 
 \begin{code}

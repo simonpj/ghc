@@ -330,7 +330,7 @@ pprIdBndrInfo info
     has_occ  = not (isNoOcc occ_info)
     has_dmd  = case dmd_info of { Nothing -> False; Just d -> not (isTop d) }
 
-    nd_has_dmd  = case nd_dmd_info of { Nothing -> False; Just d -> not (ND.isTop d) }
+    nd_has_dmd = not $ ND.isTop nd_dmd_info 
     has_lbv  = not (hasNoLBVarInfo lbv_info)
 
     doc = showAttributes
@@ -358,7 +358,7 @@ ppIdInfo id info
     , (has_caf_info,   ptext (sLit "Caf=") <> ppr caf_info)
     , (has_strictness, ptext (sLit "Str=") <> pprStrictness str_info)
 
-    , (nd_has_strictness, ptext (sLit "NewStr=") <> nd_pprStrictness nd_str_info)
+    , (True, ptext (sLit "NewStr=") <> nd_pprStrictness nd_str_info)
     , (has_unf,        ptext (sLit "Unf=") <> ppr unf_info)
     , (not (null rules), ptext (sLit "RULES:") <+> vcat (map pprRule rules))
     ]   -- Inline pragma, occ, demand, lbvar info
@@ -379,7 +379,6 @@ ppIdInfo id info
     has_strictness = isJust str_info
 
     nd_str_info = nd_strictnessInfo info
-    nd_has_strictness = isJust nd_str_info
 
     unf_info = unfoldingInfo info
     has_unf = hasSomeUnfolding unf_info

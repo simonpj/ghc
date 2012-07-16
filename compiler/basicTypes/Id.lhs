@@ -100,8 +100,8 @@ module Id (
 	nd_setIdDemandInfo, 
 	nd_setIdStrictness, 
 
-	nd_idDemandInfo, nd_idDemandInfo_maybe,
-	nd_idStrictness, nd_idStrictness_maybe, 
+	nd_idDemandInfo, 
+	nd_idStrictness,
 
         nd_zapDemandIdInfo, nd_zapIdStrictness,
 
@@ -498,17 +498,14 @@ setIdStrictness id sig = modifyIdInfo (`setStrictnessInfo` Just sig) id
 zapIdStrictness :: Id -> Id
 zapIdStrictness id = modifyIdInfo (`setStrictnessInfo` Nothing) id
 
-nd_idStrictness_maybe :: Id -> Maybe ND.StrictSig
 nd_idStrictness :: Id -> ND.StrictSig
-
-nd_idStrictness_maybe id = nd_strictnessInfo (idInfo id)
-nd_idStrictness       id = nd_idStrictness_maybe id `orElse` ND.topSig
+nd_idStrictness       id = nd_strictnessInfo (idInfo id)
 
 nd_setIdStrictness :: Id -> ND.StrictSig -> Id
-nd_setIdStrictness id sig = modifyIdInfo (`nd_setStrictnessInfo` Just sig) id
+nd_setIdStrictness id sig = modifyIdInfo (`nd_setStrictnessInfo` sig) id
 
 nd_zapIdStrictness :: Id -> Id
-nd_zapIdStrictness id = modifyIdInfo (`nd_setStrictnessInfo` Nothing) id
+nd_zapIdStrictness id = modifyIdInfo (`nd_setStrictnessInfo` ND.topSig) id
 
 -- | This predicate says whether the 'Id' has a strict demand placed on it or
 -- has a type such that it can always be evaluated strictly (e.g., an
@@ -551,14 +548,11 @@ idDemandInfo       :: Id -> Demand
 idDemandInfo_maybe id = demandInfo (idInfo id)
 idDemandInfo       id = demandInfo (idInfo id) `orElse` topDmd
 
-nd_idDemandInfo_maybe :: Id -> Maybe ND.Demand
 nd_idDemandInfo       :: Id -> ND.Demand
-
-nd_idDemandInfo_maybe id = nd_demandInfo (idInfo id)
-nd_idDemandInfo       id = nd_idDemandInfo_maybe id `orElse` ND.top
+nd_idDemandInfo       id = nd_demandInfo (idInfo id)
 
 nd_setIdDemandInfo :: Id -> ND.Demand -> Id
-nd_setIdDemandInfo id dmd = modifyIdInfo (`nd_setDemandInfo` Just dmd) id
+nd_setIdDemandInfo id dmd = modifyIdInfo (`nd_setDemandInfo` dmd) id
 
 	---------------------------------
 	-- SPECIALISATION
@@ -775,7 +769,7 @@ transferPolyIdInfo old_id abstract_wrt new_id
     new_strictness  = fmap (increaseStrictSigArity arity_increase) old_strictness
 
     nd_old_strictness  = nd_strictnessInfo old_info
-    nd_new_strictness  = fmap (ND.increaseStrictSigArity arity_increase) nd_old_strictness
+    nd_new_strictness  = ND.increaseStrictSigArity arity_increase nd_old_strictness
 
     transfer new_info = new_info `setStrictnessInfo` new_strictness
 			         `setArityInfo` new_arity

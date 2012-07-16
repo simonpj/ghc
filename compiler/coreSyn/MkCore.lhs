@@ -736,7 +736,7 @@ pc_bottoming_Id name ty
  = mkVanillaGlobalWithInfo name ty bottoming_info
  where
     bottoming_info = vanillaIdInfo `setStrictnessInfo`    Just strict_sig
-                                   `nd_setStrictnessInfo` Just nd_strict_sig
+                                   `nd_setStrictnessInfo` nd_strict_sig
 				   `setArityInfo`         1
 			-- Make arity and strictness agree
 

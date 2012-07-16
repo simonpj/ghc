@@ -31,7 +31,7 @@ import IdInfo
 import InstEnv
 import FamInstEnv
 import Demand
-import qualified NewDemand as ND ( appIsBottom )
+import qualified NewDemand as ND ( appIsBottom, isTopSig )
 import BasicTypes
 import Name hiding (varName)
 import NameSet
@@ -1171,12 +1171,6 @@ tidyTopIdInfo rhs_tidy_env name orig_rhs tidy_rhs idinfo show_unfold caf_info
               | Just (_, sig) <- mb_bot_str = Just sig
               | otherwise                   = Nothing
 
-    nd_final_sig | Just sig <- nd_strictnessInfo idinfo
-                 = WARN( _nd_bottom_hidden sig, ppr name ) Just sig
-                 | Just (_, sig) <- nd_mb_bot_str = Just sig
-                 | otherwise                      = Nothing
-
-
     -- If the cheap-and-cheerful bottom analyser can see that
     -- the RHS is bottom, it should jolly well be exposed
     _bottom_hidden id_sig = case mb_bot_str of
@@ -1184,6 +1178,14 @@ tidyTopIdInfo rhs_tidy_env name orig_rhs tidy_rhs idinfo show_unfold caf_info
                                Just (arity, _) -> not (appIsBottom id_sig arity)
 
     mb_bot_str = exprBotStrictness_maybe orig_rhs
+
+    -- The same stuff for new demand signatures          
+    nd_sig = nd_strictnessInfo idinfo
+    nd_final_sig | not $ ND.isTopSig nd_sig 
+                 = WARN( _nd_bottom_hidden nd_sig , ppr name ) nd_sig 
+                 -- try a cheap-and-cheerful bottom analyser
+                 | Just (_, sig) <- nd_mb_bot_str = sig
+                 | otherwise                      = nd_sig
 
     _nd_bottom_hidden id_sig = case nd_mb_bot_str of
                                   Nothing         -> False

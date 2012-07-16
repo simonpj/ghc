@@ -251,7 +251,7 @@ mkDataConIds wrap_name wkr_name data_con
     wkr_info  = noCafIdInfo
                 `setArityInfo`       wkr_arity
                 `setStrictnessInfo`     Just wkr_sig
-                `nd_setStrictnessInfo`  Just nd_wkr_sig
+                `nd_setStrictnessInfo`  nd_wkr_sig
                 `setUnfoldingInfo`   evaldUnfolding  -- Record that it's evaluated,
                                                         -- even if arity = 0
 
@@ -325,7 +325,7 @@ mkDataConIds wrap_name wkr_name data_con
 		    `setInlinePragInfo`    alwaysInlinePragma
                     `setUnfoldingInfo`     wrap_unf
                     `setStrictnessInfo`    Just wrap_sig
-                    `nd_setStrictnessInfo` Just nd_wrap_sig
+                    `nd_setStrictnessInfo` nd_wrap_sig
                         -- We need to get the CAF info right here because TidyPgm
                         -- does not tidy the IdInfo of implicit bindings (like the wrapper)
                         -- so it not make sure that the CAF info is sane
@@ -464,7 +464,7 @@ mkDictSelId no_unf name clas
     base_info = noCafIdInfo
                 `setArityInfo`         1
                 `setStrictnessInfo`    Just strict_sig
-                `nd_setStrictnessInfo` Just nd_strict_sig
+                `nd_setStrictnessInfo` nd_strict_sig
                 `setUnfoldingInfo`     (if no_unf then noUnfolding
 	                                else mkImplicitUnfolding rhs)
 		   -- In module where class op is defined, we must add
@@ -779,7 +779,7 @@ mkPrimOpId prim_op
            `setSpecInfo`          mkSpecInfo (primOpRules prim_op name)
            `setArityInfo`         arity
            `setStrictnessInfo`    Just strict_sig
-           `nd_setStrictnessInfo` Just nd_strict_sig
+           `nd_setStrictnessInfo` nd_strict_sig
 
 -- For each ccall we manufacture a separate CCallOpId, giving it
 -- a fresh unique, a type that is correct for this particular ccall,
@@ -806,7 +806,7 @@ mkFCallId dflags uniq fcall ty
     info = noCafIdInfo
            `setArityInfo`         arity
            `setStrictnessInfo`    Just strict_sig
-           `nd_setStrictnessInfo` Just nd_strict_sig
+           `nd_setStrictnessInfo` nd_strict_sig
 
     (_, tau)        = tcSplitForAllTys ty
     (arg_tys, _)    = tcSplitFunTys tau

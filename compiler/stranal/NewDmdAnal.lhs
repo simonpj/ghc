@@ -557,7 +557,7 @@ removeFV fv id res = (fv', dmd)
 		  dmd = lookupVarEnv fv id `orElse` deflt
                   -- See note [Default demand for variables]
 	 	  deflt | isBotRes res = bot
-		        | otherwise    = top -- used to be absDmd
+		        | otherwise    = absDmd -- why not top?
 \end{code}
 
 Note [Default demand for variables]
@@ -612,7 +612,7 @@ mkSigTy :: TopLevelFlag -> RecFlag -> Id -> CoreExpr -> DmdType -> (DmdEnv, Stri
 mkSigTy top_lvl rec_flag id rhs dmd_ty 
   = mk_sig_ty thunk_cpr_ok rhs dmd_ty
   where
-    maybe_id_dmd = nd_idDemandInfo_maybe id
+    id_dmd = nd_idDemandInfo id
 
     -- is it okay or not to assign CPR 
     -- (not okay in the first pass)
@@ -620,7 +620,7 @@ mkSigTy top_lvl rec_flag id rhs dmd_ty
 	| isTopLevel top_lvl       = False	-- Top level things don't get
 						-- their demandInfo set at all
 	| isRec rec_flag	   = False	-- Ditto recursive things
-	| Just dmd <- maybe_id_dmd = isStrictDmd dmd
+	| isStrictDmd id_dmd       = True
 	| otherwise 		   = True	-- Optimistic, first time round
 						-- See notes below
 
@@ -876,12 +876,11 @@ extendSigsWithLam :: AnalEnv -> Id -> AnalEnv
 -- definitely has product type, else we may get over-optimistic 
 -- CPR results (e.g. from \x -> x!).
 
+-- See Note [Optimistic in the "virgin" case]
 extendSigsWithLam env id
-  = case nd_idDemandInfo_maybe id of
-	Nothing	             -> extendAnalEnv NotTopLevel env id cprSig
-		-- See Note [Optimistic in the Nothing case]
-	Just d | isProdDmd d -> extendAnalEnv NotTopLevel env id cprSig
-	_                    -> env
+  = if (ae_virgin env) || (isProdDmd $ nd_idDemandInfo id)
+    then extendAnalEnv NotTopLevel env id cprSig
+    else env
 \end{code}
 
 Note [Initialising strictness]

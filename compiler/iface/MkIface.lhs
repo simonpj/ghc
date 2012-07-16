@@ -1675,11 +1675,11 @@ toIfaceIdInfo id_info
     strict_hsinfo = case strictnessInfo id_info of
                         Just sig | not (isTopSig sig) -> Just (HsStrictness sig)
                         _other                        -> Nothing
-
-
+    
+    -- Same stuff for new new demand signatures
     nd_strict_hsinfo = case nd_strictnessInfo id_info of
-                        Just sig | not (ND.isTopSig sig) -> Just (ND_HsStrictness sig)
-                        _other                           -> Nothing
+                        sig | not (ND.isTopSig sig) -> Just (ND_HsStrictness sig)
+                        _other                      -> Nothing
 
     ------------  Unfolding  --------------
     unfold_hsinfo = toIfUnfolding loop_breaker (unfoldingInfo id_info) 
