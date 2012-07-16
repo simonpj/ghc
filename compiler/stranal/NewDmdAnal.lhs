@@ -368,7 +368,7 @@ dmdTransform env var dmd
 	   -- ds can be empty, when we are just seq'ing the thing
 	   -- If so we must make up a suitable bunch of demands
 
-           -- [!!!] Invariant: res_dmd does not have call demand as its component
+           -- Invariant: res_dmd does not have call demand as its component
 	   arg_ds = if isPolyDmd res_dmd
                     then replicateDmd arity res_dmd
                     else splitProdDmd res_dmd

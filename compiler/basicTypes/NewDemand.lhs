@@ -424,6 +424,7 @@ replicateDmd _ d
 replicateDmd n (JD x y) = zipWith JD (replicateStrDmd n x) 
                                      (replicateAbsDmd n y)
 
+
 -- Check whether is a product demand
 isProdDmd :: Demand -> Bool
 isProdDmd (JD (SProd _) _) = True

@@ -256,7 +256,7 @@ mkDataConIds wrap_name wkr_name data_con
                                                         -- even if arity = 0
 
     wkr_sig = mkStrictSig (mkTopDmdType (replicate wkr_arity topDmd) cpr_info)
-    nd_wkr_sig = ND.mkStrictSig (ND.mkTopDmdType (replicate wkr_arity ND.top) ND.topRes)
+    nd_wkr_sig = ND.mkStrictSig (ND.mkTopDmdType (replicate wkr_arity ND.top) nd_cpr_info)
 
         --      Note [Data-con worker strictness]
         -- Notice that we do *not* say the worker is strict
