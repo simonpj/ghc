@@ -708,14 +708,14 @@ have a CPR in it or not.  Simple solution:
 NB: strictly_demanded is never true of a top-level Id, or of a recursive Id.
 
 Note [Optimistic in the "virgin" case]
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-Demand info now has a 'Nothing' state, just like strictness info.
-The analysis works from 'dangerous' towards a 'safe' state; so we 
-start with botSig for 'Nothing' strictness infos, and we start with
-"yes, it's demanded" for 'Nothing' in the demand info.  The
-fixpoint iteration will sort it all out.
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 
 
-We can't start with 'not-demanded' because then consider
+Demand and strictness info are initialized by top elements. However,
+this prevents from inferring a CPR property in the first pass of the
+analyser, so we keep an explicit flag ae_virgin in the AnalEnv
+datatype.
+
+We can't start with 'not-demanded' (i.e., top) because then consider
 	f x = let 
 		  t = ... I# x
 	      in
@@ -724,9 +724,9 @@ We can't start with 'not-demanded' because then consider
 In the first iteration we'd have no demand info for x, so assume
 not-demanded; then we'd get TopRes for f's CPR info.  Next iteration
 we'd see that t was demanded, and so give it the CPR property, but by
-now f has TopRes, so it will stay TopRes.  Instead, with the Nothing
-setting the first time round, we say 'yes t is demanded' the first
-time.
+now f has TopRes, so it will stay TopRes.  Instead, by checking the
+ae_virgin flag at the first time round, we say 'yes t is demanded' the
+first time.
 
 However, this does mean that for non-recursive bindings we must
 iterate twice to be sure of not getting over-optimistic CPR info,
