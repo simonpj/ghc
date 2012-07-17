@@ -23,9 +23,8 @@ module NewDemand (
         seqStrDmd, seqStrDmdList, seqAbsDmd, seqAbsDmdList,
         seqDemand, seqDemandList, seqDmdType, seqStrictSig, 
         evalDmd, vanillaCall, isStrictDmd, splitCallDmd, splitDmdTy,
-        defer, deferType, deferEnv, modifyEnv,
-        isProdDmd, isPolyDmd, replicateDmd, splitProdDmd, peelCallDmd, mkCallDmd
-
+        defer, use, deferType, deferEnv, modifyEnv,
+        isProdDmd, isPolyDmd, replicateDmd, splitProdDmd, peelCallDmd, mkCallDmd,
      ) where
 
 #include "HsVersions.h"
@@ -37,8 +36,7 @@ import UniqFM
 import Util
 import BasicTypes
 import Binary
-import Maybes		( expectJust )
-
+import Maybes		         ( expectJust )
 
 {-! for StrDmd derive: Binary !-}
 {-! for AbsDmd derive: Binary !-}
@@ -400,6 +398,9 @@ vanillaCall n =
 defer :: Demand -> Demand
 defer (JD _ a) = (JD top a)
 
+use :: Demand -> Demand
+use (JD d _) = (JD d top)
+
 \end{code}
 
 Note [Replicating polymorphic demands]
@@ -527,7 +528,8 @@ instance LatticeLike DmdResult where
   pre (DR s1 a1) (DR s2 a2)  = (pre s1 s2) && (pre a1 a2)
 
   lub  (DR s1 a1) (DR s2 a2) = mkDmdResult (lub s1 s2)  $ lub a1 a2            
-  both (DR s1 a1) (DR s2 a2) = mkDmdResult (both s1 s2) $ both a1 a2            
+  both _ r | isBotRes r = botRes
+  both r _              = r
 
 -- Pretty-printing
 instance Outputable DmdResult where
@@ -543,7 +545,7 @@ instance Binary DmdResult where
               return $ mkDmdResult x y
 
 mkDmdResult :: PureResult -> CPRResult -> DmdResult
-mkDmdResult BotRes NoCPR = topRes
+mkDmdResult BotRes RetCPR = botRes
 mkDmdResult x y = DR x y
 
 seqDmdResult :: DmdResult -> ()
@@ -555,8 +557,8 @@ seqDmdResult (DR x y) = x `seq` y `seq` ()
 -- They should onlyu use retCPR
 topRes, botRes, cprRes :: DmdResult
 topRes = DR TopRes NoCPR
-botRes = DR BotRes RetCPR
-cprRes | opt_CprOff = DR TopRes NoCPR
+botRes = DR BotRes NoCPR
+cprRes | opt_CprOff = topRes
        | otherwise  = DR TopRes RetCPR
 
 isTopRes :: DmdResult -> Bool

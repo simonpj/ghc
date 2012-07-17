@@ -38,6 +38,7 @@ import VarEnv
 import UniqFM
 import Util
 import Outputable
+import qualified NewDemand as ND
 \end{code}
 
 
@@ -303,7 +304,9 @@ newtype StrictSig = StrictSig DmdType
 		  deriving( Eq )
 
 instance Outputable StrictSig where
-   ppr (StrictSig ty) = ppr ty
+   ppr sig@(StrictSig ty) 
+     = text "   " <> ppr (toNewDmdSig sig) <> 
+       text " | " <> ppr ty 
 
 mkStrictSig :: DmdType -> StrictSig
 mkStrictSig dmd_ty = StrictSig dmd_ty
@@ -343,4 +346,41 @@ pprIfaceStrictSig (StrictSig (DmdType _ dmds res))
   = hcat (map ppr dmds) <> ppr res
 \end{code}
     
+%************************************************************************
+%*									*
+\subsection{Translating old demands to new demands}
+%*									*
+%************************************************************************
 
+\begin{code}
+
+toNewDmd :: Demand -> ND.Demand
+toNewDmd Top          = ND.top
+toNewDmd Abs          = ND.absDmd
+toNewDmd Bot          = ND.bot
+toNewDmd (Call d)     = ND.mkCallDmd $ toNewDmd d
+toNewDmd (Box d)      = ND.use $ toNewDmd d
+toNewDmd (Defer ds)   = ND.defer $ ND.mkProdDmd $ dsToDmd ds
+toNewDmd (Eval ds)    = ND.mkProdDmd $ dsToDmd ds
+
+dsToDmd :: Demands -> [ND.Demand]
+dsToDmd (Prod ds)  = map toNewDmd ds
+dsToDmd (Poly d)   = [toNewDmd d]
+
+toNewRes :: DmdResult -> ND.DmdResult
+toNewRes d
+   | isBotRes d   = ND.botRes
+   | returnsCPR d = ND.cprRes
+   | otherwise    = ND.topRes
+
+toNewDmdTy :: DmdType -> ND.DmdType
+toNewDmdTy (DmdType env ds res)
+  = ND.DmdType (mapVarEnv toNewDmd env) 
+               (map toNewDmd ds) 
+               (toNewRes res)                           
+
+toNewDmdSig :: StrictSig -> ND.StrictSig
+toNewDmdSig (StrictSig dt) 
+  = ND.StrictSig $ toNewDmdTy dt
+
+\end{code}
