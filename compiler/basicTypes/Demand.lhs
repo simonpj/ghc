@@ -29,7 +29,7 @@ module Demand(
 	splitStrictSig, increaseStrictSigArity,
 	pprIfaceStrictSig, appIsBottom, isBottomingSig, seqStrictSig,
 
-        toNewDmdSig, 
+        toNewDmdSig, toNewDmd
      ) where
 
 #include "HsVersions.h"

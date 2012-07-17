@@ -336,8 +336,9 @@ pprIdBndrInfo info
     doc = showAttributes
           [ (has_prag, ptext (sLit "InlPrag=") <> ppr prag_info)
           , (has_occ,  ptext (sLit "Occ=") <> ppr occ_info)
-          , (has_dmd,  ptext (sLit "Dmd=") <> ppr dmd_info)
-          , (nd_has_dmd,  ptext (sLit "NewDmd=") <> ppr nd_dmd_info)
+          , (has_dmd,  ptext (sLit "Dmd=") <> ppr (fmap toNewDmd dmd_info) <> 
+                       text " | " <> ppr dmd_info)
+          , (nd_has_dmd,  ptext (sLit "NewDmd = ") <> ppr nd_dmd_info)
           , (has_lbv , ptext (sLit "Lbv=") <> ppr lbv_info)
           ]
 \end{code}
