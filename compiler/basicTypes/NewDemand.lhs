@@ -519,6 +519,7 @@ instance Binary CPRResult where
 data DmdResult = DR { res :: PureResult, cpr :: CPRResult }
      deriving ( Eq )
 
+-- TODO rework DmdResult to make it more clear
 instance LatticeLike DmdResult where
   bot                        = botRes
   top                        = topRes
@@ -527,8 +528,13 @@ instance LatticeLike DmdResult where
   pre _ x | x == top         = True
   pre (DR s1 a1) (DR s2 a2)  = (pre s1 s2) && (pre a1 a2)
 
-  lub  (DR s1 a1) (DR s2 a2) = mkDmdResult (lub s1 s2)  $ lub a1 a2            
-  both _ r | isBotRes r = botRes
+  lub  r r' | isBotRes r                   = r'
+  lub  r r' | isBotRes r'                  = r
+  lub  r r' 
+        | returnsCPR r &&  returnsCPR r'   = r
+  lub  _ _                                 = top
+
+  both _ r | isBotRes r = r
   both r _              = r
 
 -- Pretty-printing

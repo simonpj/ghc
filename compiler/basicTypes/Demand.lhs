@@ -28,6 +28,8 @@ module Demand(
         isTopSig,
 	splitStrictSig, increaseStrictSigArity,
 	pprIfaceStrictSig, appIsBottom, isBottomingSig, seqStrictSig,
+
+        toNewDmdSig, 
      ) where
 
 #include "HsVersions.h"
@@ -209,8 +211,10 @@ instance Eq DmdType where
 			      && ds1 == ds2 && res1 == res2
 
 instance Outputable DmdType where
-  ppr (DmdType fv ds res) 
-    = hsep [text "DmdType",
+  ppr dt@(DmdType fv ds res) 
+    -- pretty-print a converted version
+    = (ppr $ toNewDmdTy dt) <> text " | " <>     
+      hsep [text "DmdType",
 	    hcat (map ppr ds) <> ppr res,
 	    if null fv_elts then empty
 	    else braces (fsep (map pp_elt fv_elts))]
@@ -304,9 +308,7 @@ newtype StrictSig = StrictSig DmdType
 		  deriving( Eq )
 
 instance Outputable StrictSig where
-   ppr sig@(StrictSig ty) 
-     = text "   " <> ppr (toNewDmdSig sig) <> 
-       text " | " <> ppr ty 
+   ppr (StrictSig ty) = text "   " <> ppr ty 
 
 mkStrictSig :: DmdType -> StrictSig
 mkStrictSig dmd_ty = StrictSig dmd_ty
