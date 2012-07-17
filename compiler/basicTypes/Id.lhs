@@ -499,7 +499,7 @@ zapIdStrictness :: Id -> Id
 zapIdStrictness id = modifyIdInfo (`setStrictnessInfo` Nothing) id
 
 nd_idStrictness :: Id -> ND.StrictSig
-nd_idStrictness       id = nd_strictnessInfo (idInfo id)
+nd_idStrictness id = nd_strictnessInfo (idInfo id)
 
 nd_setIdStrictness :: Id -> ND.StrictSig -> Id
 nd_setIdStrictness id sig = modifyIdInfo (`nd_setStrictnessInfo` sig) id

@@ -45,6 +45,7 @@ import Specialise       ( specProgram)
 import SpecConstr       ( specConstrProgram)
 import DmdAnal          ( dmdAnalPgm )
 import NewDmdAnal       ( dmdAnalProgram )
+import StrCompare       ( comparePgm )
 import WorkWrap         ( wwTopBinds )
 import Vectorise        ( vectorise )
 import FastString
@@ -201,6 +202,7 @@ getCoreToDo dflags
     new_demand_phases = (CoreDoPasses [
                            CoreDoStrictness,
                            CoreDoNewStrictness,
+                           CoreDoCompareStrictness,
                            CoreDoWorkerWrapper,
                            simpl_phase 0 ["post-worker-wrapper"] max_iter
                         ])
@@ -404,6 +406,9 @@ doCorePass _      CoreDoStrictness          = {-# SCC "Stranal" #-}
 
 doCorePass _      CoreDoNewStrictness       = {-# SCC "NewStranal" #-}
                                               doPassDM dmdAnalProgram
+
+doCorePass _      CoreDoCompareStrictness   = {-# SCC "StrCompare" #-}
+                                              doPassDM comparePgm
 
 doCorePass dflags CoreDoWorkerWrapper       = {-# SCC "WorkWrap" #-}
                                               doPassU (wwTopBinds dflags)

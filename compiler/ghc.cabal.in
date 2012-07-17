@@ -370,6 +370,7 @@ Library
         StgSyn
         DmdAnal
         NewDmdAnal
+        StrCompare
         WorkWrap
         WwLib
         FamInst

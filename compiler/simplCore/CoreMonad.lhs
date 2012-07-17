@@ -246,6 +246,7 @@ data CoreToDo           -- These are diff core-to-core passes,
   | CoreDoStaticArgs
   | CoreDoStrictness
   | CoreDoNewStrictness
+  | CoreDoCompareStrictness
   | CoreDoWorkerWrapper
   | CoreDoSpecialising
   | CoreDoSpecConstr
@@ -289,6 +290,8 @@ coreDumpFlag CoreDoPrintCore         = Nothing
 coreDumpFlag (CoreDoRuleCheck {})    = Nothing
 coreDumpFlag CoreDoNothing           = Nothing
 coreDumpFlag (CoreDoPasses {})       = Nothing
+coreDumpFlag CoreDoCompareStrictness = Nothing
+
 
 instance Outputable CoreToDo where
   ppr (CoreDoSimplify _ _)     = ptext (sLit "Simplifier")
@@ -299,6 +302,7 @@ instance Outputable CoreToDo where
   ppr CoreDoStaticArgs 	       = ptext (sLit "Static argument")
   ppr CoreDoStrictness 	       = ptext (sLit "Demand analysis")
   ppr CoreDoNewStrictness      = ptext (sLit "New demand analysis")
+  ppr CoreDoCompareStrictness  = ptext (sLit "Demand comparison")
   ppr CoreDoWorkerWrapper      = ptext (sLit "Worker Wrapper binds")
   ppr CoreDoSpecialising       = ptext (sLit "Specialise")
   ppr CoreDoSpecConstr         = ptext (sLit "SpecConstr")
