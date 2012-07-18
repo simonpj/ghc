@@ -38,8 +38,9 @@ comparePgm better dflags binds  = do
            then do putStrLn  ""
                    putStrLn  header
                    putStrLn  "==============================================="
-                   putStrLn  ""
                    mapM_ (putStrLn . renTuple maxs) tuples 
+                   putStrLn  ""
+
            else return ()
 	return binds
      where 

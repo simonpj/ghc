@@ -415,7 +415,6 @@ doCorePass _      CoreDoCompareBetter       = {-# SCC "StrCompare" #-}
 doCorePass _      CoreDoCompareWorse        = {-# SCC "StrCompare" #-}
                                               doPassDM $ comparePgm False
 
-
 doCorePass dflags CoreDoWorkerWrapper       = {-# SCC "WorkWrap" #-}
                                               if new_ww
                                               then doPassU (NWW.wwTopBinds dflags)
