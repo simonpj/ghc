@@ -211,7 +211,7 @@ dmdAnal env dmd (Case scrut case_bndr ty [alt@(DataAlt dc, _, _)])
 	--	x = (a, absent-error)
 	-- and that'll crash.
 	-- So at one stage I had:
-	--	dead_case_bndr		 = isAbsentDmd (idDemandInfo case_bndr')
+	--	dead_case_bndr		 = isAbs (idDemandInfo case_bndr')
 	--	keepity | dead_case_bndr = Drop
 	--		| otherwise	 = Keep		
 	--

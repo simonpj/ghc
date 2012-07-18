@@ -176,7 +176,7 @@ endif
 ifeq "$(BuildFlavour)" "newdmd"
 
 SRC_HC_OPTS        = -H64m -O -fasm
-GhcLibHcOpts       = -O -dcore-lint -XNewDemandAnalyser -XNewWorkerWrapper
+GhcLibHcOpts       = -O -dcore-lint -XNewDemandAnalyser
 GhcStage1HcOpts    = -Rghc-timing -O -fasm 
 GhcStage2HcOpts    = -Rghc-timing -O0 -DDEBUG -Werror
 SplitObjs          = NO

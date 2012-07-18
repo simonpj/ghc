@@ -35,8 +35,10 @@ comparePgm better dflags binds  = do
                            
         if length table > 0 
            -- Display only if something interesting found
-           then do putStrLn  header
+           then do putStrLn  ""
+                   putStrLn  header
                    putStrLn  "==============================================="
+                   putStrLn  ""
                    mapM_ (putStrLn . renTuple maxs) tuples 
            else return ()
 	return binds

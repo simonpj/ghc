@@ -22,7 +22,7 @@ module NewDemand (
        
         seqStrDmd, seqStrDmdList, seqAbsDmd, seqAbsDmdList,
         seqDemand, seqDemandList, seqDmdType, seqStrictSig, 
-        evalDmd, vanillaCall, isStrictDmd, splitCallDmd, splitDmdTy, isAbsent,
+        evalDmd, vanillaCall, isStrictDmd, splitCallDmd, splitDmdTy,
         someCompUsed, isUsed, isUsedDmd,
         defer, use, deferType, deferEnv, modifyEnv,
         isProdDmd, isPolyDmd, replicateDmd, splitProdDmd, peelCallDmd, mkCallDmd,
@@ -440,10 +440,6 @@ replicateDmd _ d
   | not $ isPolyDmd d   = pprPanic "replicateDmd" (ppr d)          
 replicateDmd n (JD x y) = zipWith JD (replicateStrDmd n x) 
                                      (replicateAbsDmd n y)
-
-isAbsent :: Demand -> Bool
-isAbsent d | d == absDmd = True
-isAbsent _               = False 
 
 -- Check whether is a product demand
 isProdDmd :: Demand -> Bool
