@@ -2,9 +2,9 @@
 % (c) The GRASP/AQUA Project, Glasgow University, 1993-1998
 %
 
-        	------------------------------------------
-		A comparator for demadn analsysis' results
-		------------------------------------------
+        	-----------------------------------------
+		A comparator for demand analsysis results
+		-----------------------------------------
 
 \begin{code}
 {-# OPTIONS -fno-warn-tabs #-}
@@ -106,4 +106,6 @@ renTuple (m1, m2, m3, _m4) (a, b, c, d)
     skip1 = replicate (m1 + 2 - length a) ' '
     skip2 = replicate (m2 + 2 - length b) ' '
     skip3 = replicate (m3 + 2 - length c) ' '
+
 \end{code}
+
