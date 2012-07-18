@@ -884,6 +884,7 @@ extendSigsWithLam :: AnalEnv -> Id -> AnalEnv
 
 -- See Note [Optimistic CPR in the "virgin" case]
 extendSigsWithLam env id
+    -- is it too conservative?
   = if (ae_virgin env) || (isProdDmd $ nd_idDemandInfo id)
     then extendAnalEnv NotTopLevel env id cprSig
     else env

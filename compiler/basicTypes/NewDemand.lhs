@@ -106,8 +106,8 @@ strCall s  = case s of
 
 strProd :: [StrDmd] -> StrDmd
 strProd sx
+  | any (== HyperStr) sx    = strBot
   | all (== Lazy) sx        = strStr
-  | any (== HyperStr) sx    = strTop
   | otherwise               = SProd sx
 
 -- Pretty-printing
@@ -443,9 +443,9 @@ replicateDmd n (JD x y) = zipWith JD (replicateStrDmd n x)
 
 -- Check whether is a product demand
 isProdDmd :: Demand -> Bool
-isProdDmd (JD Str _)       = True
-isProdDmd (JD (SProd _) _) = True
-isProdDmd _                = False
+--isProdDmd (JD Str a) | isUsed a  = True
+isProdDmd (JD (SProd _) _)       = True
+isProdDmd _                      = False
 
 isPolyDmd :: Demand -> Bool
 isPolyDmd (JD a b) = isPolyStrDmd a && isPolyAbsDmd b
