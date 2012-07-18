@@ -443,6 +443,7 @@ replicateDmd n (JD x y) = zipWith JD (replicateStrDmd n x)
 
 -- Check whether is a product demand
 isProdDmd :: Demand -> Bool
+isProdDmd (JD Str _)       = True
 isProdDmd (JD (SProd _) _) = True
 isProdDmd _                = False
 
@@ -545,7 +546,7 @@ instance LatticeLike DmdResult where
   lub  r r' | isBotRes r                   = r'
   lub  r r' | isBotRes r'                  = r
   lub  r r' 
-        | returnsCPR r &&  returnsCPR r'   = r
+        | returnsCPR r && returnsCPR r'    = r
   lub  _ _                                 = top
 
   both _ r | isBotRes r = r
