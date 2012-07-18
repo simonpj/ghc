@@ -2197,7 +2197,7 @@ xFlags = [
   ( "UndecidableInstances",             Opt_UndecidableInstances, nop ),
   ( "IncoherentInstances",              Opt_IncoherentInstances, nop ),
   ( "PackageImports",                   Opt_PackageImports, nop ),
-  ( "NewDemandAnalyser",                Opt_NewDemandAnalyser, nop )
+  ( "NewDemandAnalyser",                Opt_NewDemandAnalyser, nop ),
   ( "NewWorkerWrapper",                 Opt_NewWorkerWrapper, nop )
 
   ]
