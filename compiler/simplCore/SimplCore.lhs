@@ -413,10 +413,11 @@ doCorePass _      CoreDoCompareStrictness   = {-# SCC "StrCompare" #-}
 
 doCorePass dflags CoreDoWorkerWrapper       = {-# SCC "WorkWrap" #-}
                                               if new_ww
-                                              then doPassU (wwTopBinds dflags)
-                                              else doPassU (NWW.wwTopBinds dflags)
+                                              then doPassU (NWW.wwTopBinds dflags)
+                                              else doPassU (wwTopBinds dflags)
                                               where
-                                                new_ww = xopt Opt_NewDemandAnalyser dflags
+                                                new_ww = xopt Opt_NewDemandAnalyser dflags &&
+                                                         xopt Opt_NewWorkerWrapper  dflags
 
 doCorePass dflags CoreDoSpecialising        = {-# SCC "Specialise" #-}
                                               specProgram dflags

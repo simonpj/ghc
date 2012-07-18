@@ -487,6 +487,7 @@ data ExtensionFlag
    | Opt_RelaxedLayout
    | Opt_TraditionalRecordSyntax
    | Opt_NewDemandAnalyser
+   | Opt_NewWorkerWrapper
    deriving (Eq, Enum, Show)
 
 -- | Contains not only a collection of 'DynFlag's but also a plethora of
@@ -2197,6 +2198,8 @@ xFlags = [
   ( "IncoherentInstances",              Opt_IncoherentInstances, nop ),
   ( "PackageImports",                   Opt_PackageImports, nop ),
   ( "NewDemandAnalyser",                Opt_NewDemandAnalyser, nop )
+  ( "NewWorkerWrapper",                 Opt_NewWorkerWrapper, nop )
+
   ]
 
 defaultFlags :: [DynFlag]
