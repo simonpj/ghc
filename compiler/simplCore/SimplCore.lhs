@@ -203,7 +203,8 @@ getCoreToDo dflags
     new_demand_phases = (CoreDoPasses [
                            CoreDoStrictness,
                            CoreDoNewStrictness,
-                           CoreDoCompareStrictness,
+                           CoreDoCompareBetter,
+                           CoreDoCompareWorse,
                            CoreDoWorkerWrapper,
                            simpl_phase 0 ["post-worker-wrapper"] max_iter
                         ])
@@ -408,8 +409,12 @@ doCorePass _      CoreDoStrictness          = {-# SCC "Stranal" #-}
 doCorePass _      CoreDoNewStrictness       = {-# SCC "NewStranal" #-}
                                               doPassDM dmdAnalProgram
 
-doCorePass _      CoreDoCompareStrictness   = {-# SCC "StrCompare" #-}
-                                              doPassDM comparePgm
+doCorePass _      CoreDoCompareBetter       = {-# SCC "StrCompare" #-}
+                                              doPassDM $ comparePgm True
+
+doCorePass _      CoreDoCompareWorse        = {-# SCC "StrCompare" #-}
+                                              doPassDM $ comparePgm False
+
 
 doCorePass dflags CoreDoWorkerWrapper       = {-# SCC "WorkWrap" #-}
                                               if new_ww

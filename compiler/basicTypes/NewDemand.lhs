@@ -448,7 +448,6 @@ isAbsent _               = False
 -- Check whether is a product demand
 isProdDmd :: Demand -> Bool
 isProdDmd (JD (SProd _) _) = True
-isProdDmd (JD s (UProd _)) = s /= top
 isProdDmd _                = False
 
 isPolyDmd :: Demand -> Bool
@@ -667,7 +666,10 @@ instance LatticeLike DmdType where
   bot = botDmdType
   top = topDmdType
 
-  pre _ _ = pprPanic "DmdType.pre" empty
+  pre (DmdType _ ds1 res1) (DmdType _ ds2 res2)
+      = (res1 `pre` res2) &&
+        (length ds1 == length ds2) &&
+        all (\(x, y) -> x `pre` y) (zip ds1 ds2)
 
   lub (DmdType fv1 ds1 r1) (DmdType fv2 ds2 r2)
     = DmdType lub_fv2 (lub_ds ds1 ds2) (r1 `lub` r2)

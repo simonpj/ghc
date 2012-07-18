@@ -18,22 +18,27 @@ import Id
 import Var
 import DynFlags
 import Demand        ( toNewDmdSig )
+import NewDemand as ND
 
-comparePgm :: DynFlags -> CoreProgram -> IO CoreProgram
-comparePgm dflags binds  = do 
-	let table    = traverseBinds [] binds
+comparePgm :: Bool -> DynFlags -> CoreProgram -> IO CoreProgram
+comparePgm better dflags binds  = do 
+	let table    = traverseBinds better [] binds
             rendered = map (liftTup4 $ rendr dflags) $ reverse table
             tuples = init_res ++ rendered
             maxs   = foldl (\(a, b, c, d) (w, x, y, z) -> 
                                  (max a w, max b x, max c y, max d z)) 
                            (0, 0, 0, 0)
                            (map (liftTup4 length) tuples)
+            header = if better
+                     then "          Strictly better new results         "               
+                     else "          Strictly worse new results          "
                            
-
-        putStrLn  "          Comparing strictness results         "
-        putStrLn  "==============================================="
-        mapM_ (putStrLn . renTuple maxs) tuples 
-
+        if length table > 0 
+           -- Display only if something interesting found
+           then do putStrLn  header
+                   putStrLn  "==============================================="
+                   mapM_ (putStrLn . renTuple maxs) tuples 
+           else return ()
 	return binds
      where 
         init_res :: [Result String]
@@ -42,54 +47,22 @@ comparePgm dflags binds  = do
 type Result a = (a, a, a, a)
 type Acc  = [Result SDoc]
 
-traverseBinds :: Acc -> CoreProgram -> Acc
-traverseBinds acc binds
+traverseBinds :: Bool -> Acc -> CoreProgram -> Acc
+traverseBinds better acc binds
   = let binders = bindersOfBinds binds
-        rhss    = concatMap rhssOfBind binds
-        acc1    = foldl record acc binders
-        _acc2   = foldl traverseExpr acc1 rhss
-     in acc1
+     in foldl (record better) acc binders
 
-traverseExpr :: Acc -> CoreExpr -> Acc
-traverseExpr acc (Lit _) = acc
-traverseExpr acc (Var _) = acc
-traverseExpr acc (Type _) = acc
-traverseExpr acc (Coercion _) = acc
-traverseExpr acc (Tick _ e) = traverseExpr acc e
-traverseExpr acc (Cast e _) = traverseExpr acc e
-traverseExpr acc (App e1 e2) = acc2 
-  where 
-    acc2 = traverseExpr acc1 e2
-    acc1 = traverseExpr acc e1
-traverseExpr acc (Lam b e) = acc2
+record :: Bool -> Acc -> Id -> Acc
+record better acc id
+  | old' == new                      = acc
+  | better && (new `pre` old')       = rdoc : acc
+  | (not better) && (old' `pre` new) = rdoc : acc
+  | otherwise                        = acc
   where
-    acc2 = traverseExpr acc1 e
-    acc1 = record acc b
-traverseExpr acc (Let bs e) = acc2
-  where
-    acc2 = traverseExpr acc1 e
-    acc1 = traverseBinds acc [bs]
-traverseExpr acc (Case e b _ alts) = acc3
-  where acc3 = foldl traverseAlt acc2 alts
-        acc2 = traverseExpr acc1 e
-        acc1 = record acc b
-
-traverseAlt :: Acc -> Alt Id -> Acc
-traverseAlt acc (_, bs, e) = acc2
-  where
-    acc2 = traverseExpr acc1 e
-    acc1 = foldl record acc bs
-
-record :: Acc -> Id -> Acc
-record acc id
-  = if old' == new
-    then acc
-    else rdoc : acc
-  where
-      name    = varName id
-      old     = idStrictness id
-      old'    = toNewDmdSig old
-      new     = nd_idStrictness id
+      name                 = varName id
+      old                  = idStrictness id
+      StrictSig old'       = toNewDmdSig old
+      StrictSig new        = nd_idStrictness id
       rdoc    = (ppr name, ppr old, ppr old', ppr new)
 
 rendr :: DynFlags -> SDoc -> String 
