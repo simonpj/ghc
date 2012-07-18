@@ -11,7 +11,7 @@
 --     http://hackage.haskell.org/trac/ghc/wiki/Commentary/CodingStyle#TabsvsSpaces
 -- for details
 
-module WorkWrap ( wwTopBinds, mkWrapper ) where
+module NewWorkWrap ( wwTopBinds, mkWrapper ) where
 
 import CoreSyn
 import CoreUnfold	( certainlyWillInline, mkInlineUnfolding, mkWwInlineRule )
@@ -21,13 +21,12 @@ import Var
 import Id
 import Type		( Type )
 import IdInfo
-import Demand
 import UniqSupply
 import BasicTypes
 import DynFlags
 import VarEnv		( isEmptyVarEnv )
-import Maybes		( orElse )
-import WwLib
+import NewDemand
+import NewWwLib
 import Util
 import Outputable
 import MonadUtils
@@ -258,7 +257,7 @@ tryWW dflags is_rec fn_id rhs
 	-- Furthermore, don't even expose strictness info
   = return [ (fn_id, rhs) ]
 
-  | is_thunk && worthSplittingThunk maybe_fn_dmd res_info
+  | is_thunk && worthSplittingThunk fn_dmd res_info
   	-- See Note [Thunk splitting]
   = ASSERT2( isNonRec is_rec, ppr new_fn_id )	-- The thunk must be non-recursive
     checkSize new_fn_id rhs $ 
@@ -273,12 +272,12 @@ tryWW dflags is_rec fn_id rhs
 
   where
     fn_info   	 = idInfo fn_id
-    maybe_fn_dmd = demandInfo fn_info
+    fn_dmd = nd_demandInfo fn_info
     inline_act   = inlinePragmaActivation (inlinePragInfo fn_info)
 
 	-- In practice it always will have a strictness 
 	-- signature, even if it's a uninformative one
-    strict_sig  = strictnessInfo fn_info `orElse` topSig
+    strict_sig  = nd_strictnessInfo fn_info
     StrictSig (DmdType env wrap_dmds res_info) = strict_sig
 
 	-- new_fn_id has the DmdEnv zapped.  
@@ -287,7 +286,7 @@ tryWW dflags is_rec fn_id rhs
 	--	(c) it becomes incorrect as things are cloned, because
 	--	    we don't push the substitution into it
     new_fn_id | isEmptyVarEnv env = fn_id
-	      | otherwise	  = fn_id `setIdStrictness` 
+	      | otherwise	  = fn_id `nd_setIdStrictness` 
 				     StrictSig (mkTopDmdType wrap_dmds res_info)
 
     is_fun    = notNull wrap_dmds
@@ -341,7 +340,7 @@ splitFun dflags fn_id fn_info wrap_dmds res_info rhs
 				-- not w/wd). However, the RuleMatchInfo is not transferred since
                                 -- it does not make sense for workers to be constructorlike.
 
-			`setIdStrictness` StrictSig (mkTopDmdType work_demands work_res_info)
+			`nd_setIdStrictness` StrictSig (mkTopDmdType work_demands work_res_info)
 				-- Even though we may not be at top level, 
 				-- it's ok to give it an empty DmdEnv
 
@@ -376,8 +375,8 @@ splitFun dflags fn_id fn_info wrap_dmds res_info rhs
     		    -- The arity is set by the simplifier using exprEtaExpandArity
 		    -- So it may be more than the number of top-level-visible lambdas
 
-    work_res_info | isBotRes res_info = BotRes	-- Cpr stuff done by wrapper
-		  | otherwise	      = TopRes
+    work_res_info | isBotRes res_info = botRes	-- Cpr stuff done by wrapper
+		  | otherwise	      = topRes
 
     one_shots = get_one_shots rhs
 
@@ -464,19 +463,20 @@ worthSplittingFun ds res
 	-- and hence do_strict_ww is False if arity is zero and there is no CPR
   -- See Note [Worker-wrapper for bottoming functions]
   where
-    worth_it Abs	      = True	-- Absent arg
-    worth_it (Eval (Prod _))  = True	-- Product arg to evaluate
-    worth_it _    	      = False
+    worth_it d | isAbs d            = True	-- Absent arg
+    worth_it (JD (SProd _) a)       = isUsed a	-- Product arg to evaluate
+    worth_it _    	            = False
 
-worthSplittingThunk :: Maybe Demand	-- Demand on the thunk
+worthSplittingThunk :: Demand	        -- Demand on the thunk
 		    -> DmdResult	-- CPR info for the thunk
 		    -> Bool
-worthSplittingThunk maybe_dmd res
-  = worth_it maybe_dmd || returnsCPR res
+worthSplittingThunk dmd res
+  = worth_it dmd || returnsCPR res
   where
 	-- Split if the thing is unpacked
-    worth_it (Just (Eval (Prod ds))) = not (all isAbsent ds)
-    worth_it _    	   	     = False
+    worth_it (JD (SProd _ds) a)         = someCompUsed a   
+        -- second component points out that at least some of     
+    worth_it _    	    	        = False
 \end{code}
 
 Note [Worker-wrapper for bottoming functions]

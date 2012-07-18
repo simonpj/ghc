@@ -373,6 +373,8 @@ Library
         StrCompare
         WorkWrap
         WwLib
+        NewWorkWrap
+        NewWwLib
         FamInst
         Inst
         TcAnnotations

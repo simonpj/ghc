@@ -608,6 +608,10 @@ annotateLamIdBndr env (DmdType fv ds res) id
 
     (fv', dmd) = removeFV fv id res
 
+-- argDemand :: Demand -> Demand
+-- argDemand d | isBot d  = absDmd
+-- argDemand d	       = d
+
 mkSigTy :: TopLevelFlag -> RecFlag -> AnalEnv -> Id -> 
            CoreExpr -> DmdType -> (DmdEnv, StrictSig)
 mkSigTy top_lvl rec_flag env id rhs dmd_ty 

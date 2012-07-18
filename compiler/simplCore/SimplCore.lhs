@@ -47,6 +47,7 @@ import DmdAnal          ( dmdAnalPgm )
 import NewDmdAnal       ( dmdAnalProgram )
 import StrCompare       ( comparePgm )
 import WorkWrap         ( wwTopBinds )
+import qualified NewWorkWrap as NWW        ( wwTopBinds )
 import Vectorise        ( vectorise )
 import FastString
 import SrcLoc
@@ -411,7 +412,11 @@ doCorePass _      CoreDoCompareStrictness   = {-# SCC "StrCompare" #-}
                                               doPassDM comparePgm
 
 doCorePass dflags CoreDoWorkerWrapper       = {-# SCC "WorkWrap" #-}
-                                              doPassU (wwTopBinds dflags)
+                                              if new_ww
+                                              then doPassU (wwTopBinds dflags)
+                                              else doPassU (NWW.wwTopBinds dflags)
+                                              where
+                                                new_ww = xopt Opt_NewDemandAnalyser dflags
 
 doCorePass dflags CoreDoSpecialising        = {-# SCC "Specialise" #-}
                                               specProgram dflags

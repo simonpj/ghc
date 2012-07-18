@@ -11,18 +11,19 @@ module NewDemand (
         StrDmd(..), strBot, strTop, strStr, strProd, strCall,
         AbsDmd(..), absBot, absTop, absProd,
         Demand, JointDmd(..), mkJointDmd, mkProdDmd, 
-        isTop, isAbs, absDmd,
+        isTop, isBot, isAbs, absDmd,
 	DmdType(..), topDmdType, botDmdType, mkDmdType, mkTopDmdType, 
 		dmdTypeDepth, 
 	DmdEnv, emptyDmdEnv,
-	DmdResult(..), isBotRes, isTopRes, resTypeArgDmd, topRes, botRes, cprRes,
+	DmdResult(..), CPRResult(..), isBotRes, isTopRes, resTypeArgDmd, topRes, botRes, cprRes,
         appIsBottom, isBottomingSig, pprIfaceStrictSig, returnsCPR, 
 	StrictSig(..), mkStrictSig, topSig, botSig, cprSig,
         isTopSig, splitStrictSig, increaseStrictSigArity,
        
         seqStrDmd, seqStrDmdList, seqAbsDmd, seqAbsDmdList,
         seqDemand, seqDemandList, seqDmdType, seqStrictSig, 
-        evalDmd, vanillaCall, isStrictDmd, splitCallDmd, splitDmdTy,
+        evalDmd, vanillaCall, isStrictDmd, splitCallDmd, splitDmdTy, isAbsent,
+        someCompUsed, isUsed, isUsedDmd,
         defer, use, deferType, deferEnv, modifyEnv,
         isProdDmd, isPolyDmd, replicateDmd, splitProdDmd, peelCallDmd, mkCallDmd,
      ) where
@@ -346,6 +347,10 @@ isTop :: JointDmd -> Bool
 isTop (JD s a) | s == top && a == top = True
 isTop _                               = False 
 
+isBot :: JointDmd -> Bool
+isBot (JD s a) | s == bot && a == bot = True
+isBot _                               = False 
+
 isAbs :: JointDmd -> Bool
 isAbs (JD s a) | s == top && a == bot = True
 isAbs _                               = False 
@@ -371,6 +376,17 @@ instance Binary JointDmd where
 
 isStrictDmd :: Demand -> Bool
 isStrictDmd (JD x _) = x /= top
+
+isUsedDmd :: Demand -> Bool
+isUsedDmd (JD _ x) = x /= bot
+
+isUsed :: AbsDmd -> Bool
+isUsed x = x /= bot
+
+someCompUsed :: AbsDmd -> Bool
+someCompUsed Used      = True
+someCompUsed (UProd _) = True
+someCompUsed _         = False
 
 evalDmd :: JointDmd
 evalDmd = mkJointDmd strStr absTop
@@ -425,6 +441,9 @@ replicateDmd _ d
 replicateDmd n (JD x y) = zipWith JD (replicateStrDmd n x) 
                                      (replicateAbsDmd n y)
 
+isAbsent :: Demand -> Bool
+isAbsent d | d == absDmd = True
+isAbsent _               = False 
 
 -- Check whether is a product demand
 isProdDmd :: Demand -> Bool

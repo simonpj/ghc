@@ -16,7 +16,6 @@
 -- | Arit and eta expansion
 module CoreArity (
 	manifestArity, exprArity, exprBotStrictness_maybe,
-        nd_exprBotStrictness_maybe, 
 	exprEtaExpandArity, CheapFun, etaExpand
     ) where
 
@@ -126,30 +125,19 @@ typeArity ty
   = []
 
 ---------------
-exprBotStrictness_maybe :: CoreExpr -> Maybe (Arity, StrictSig)
+exprBotStrictness_maybe :: CoreExpr -> Maybe (Arity, StrictSig, ND.StrictSig)
 -- A cheap and cheerful function that identifies bottoming functions
 -- and gives them a suitable strictness signatures.  It's used during
 -- float-out
 exprBotStrictness_maybe e
   = case getBotArity (arityType env e) of
 	Nothing -> Nothing
-	Just ar -> Just (ar, mkStrictSig (mkTopDmdType (replicate ar topDmd) BotRes))
+	Just ar -> Just (ar, sig ar, nd_sig ar)
   where
-    env = AE { ae_bndrs = [], ae_ped_bot = True, ae_cheap_fn = \ _ _ -> False }
+    env       = AE { ae_bndrs = [], ae_ped_bot = True, ae_cheap_fn = \ _ _ -> False }
+    sig ar    = mkStrictSig (mkTopDmdType (replicate ar topDmd) BotRes)
+    nd_sig ar = ND.mkStrictSig (ND.mkTopDmdType (replicate ar ND.top) ND.botRes)
                   -- For this purpose we can be very simple
-
-nd_exprBotStrictness_maybe :: CoreExpr -> Maybe (Arity, ND.StrictSig)
--- A cheap and cheerful function that identifies bottoming functions
--- and gives them a suitable strictness signatures.  It's used during
--- float-out
-nd_exprBotStrictness_maybe e
-  = case getBotArity (arityType env e) of
-	Nothing -> Nothing
-	Just ar -> Just (ar, ND.mkStrictSig (ND.mkTopDmdType (replicate ar ND.top) ND.botRes))
-  where
-    env = AE { ae_bndrs = [], ae_ped_bot = True, ae_cheap_fn = \ _ _ -> False }
-                  -- For this purpose we can be very simple
-
 \end{code}
 
 Note [exprArity invariant]

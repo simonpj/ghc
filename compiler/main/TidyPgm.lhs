@@ -21,8 +21,7 @@ import CorePrep
 import CoreUtils
 import Literal
 import Rules
-import CoreArity        ( exprArity, exprBotStrictness_maybe,
-                          nd_exprBotStrictness_maybe )
+import CoreArity        ( exprArity, exprBotStrictness_maybe )
 import VarEnv
 import VarSet
 import Var
@@ -1168,14 +1167,14 @@ tidyTopIdInfo rhs_tidy_env name orig_rhs tidy_rhs idinfo show_unfold caf_info
     --------- Strictness ------------
     final_sig | Just sig <- strictnessInfo idinfo
               = WARN( _bottom_hidden sig, ppr name ) Just sig
-              | Just (_, sig) <- mb_bot_str = Just sig
+              | Just (_, sig, _) <- mb_bot_str = Just sig
               | otherwise                   = Nothing
 
     -- If the cheap-and-cheerful bottom analyser can see that
     -- the RHS is bottom, it should jolly well be exposed
     _bottom_hidden id_sig = case mb_bot_str of
                                Nothing         -> False
-                               Just (arity, _) -> not (appIsBottom id_sig arity)
+                               Just (arity, _, _) -> not (appIsBottom id_sig arity)
 
     mb_bot_str = exprBotStrictness_maybe orig_rhs
 
@@ -1184,14 +1183,12 @@ tidyTopIdInfo rhs_tidy_env name orig_rhs tidy_rhs idinfo show_unfold caf_info
     nd_final_sig | not $ ND.isTopSig nd_sig 
                  = WARN( _nd_bottom_hidden nd_sig , ppr name ) nd_sig 
                  -- try a cheap-and-cheerful bottom analyser
-                 | Just (_, sig) <- nd_mb_bot_str = sig
-                 | otherwise                      = nd_sig
+                 | Just (_, _, nsig) <- mb_bot_str = nsig
+                 | otherwise                       = nd_sig
 
-    _nd_bottom_hidden id_sig = case nd_mb_bot_str of
+    _nd_bottom_hidden nd_id_sig = case mb_bot_str of
                                   Nothing         -> False
-                                  Just (arity, _) -> not (ND.appIsBottom id_sig arity)
-
-    nd_mb_bot_str = nd_exprBotStrictness_maybe orig_rhs
+                                  Just (arity, _, _) -> not (ND.appIsBottom nd_id_sig arity)
 
     --------- Unfolding ------------
     unf_info = unfoldingInfo idinfo

@@ -78,6 +78,7 @@ import VarSet
 import VarEnv
 import Literal		( litIsTrivial )
 import Demand		( StrictSig, increaseStrictSigArity )
+import qualified NewDemand as ND ( StrictSig, increaseStrictSigArity )
 import Name		( getOccName, mkSystemVarName )
 import OccName		( occNameString )
 import Type		( isUnLiftedType, Type, mkPiTypes )
@@ -561,10 +562,11 @@ by 7% in spectral/puzzle (a rather strange benchmark) and 1.2% in real/fem.
 Doesn't change any other allocation at all.
 
 \begin{code}
-annotateBotStr :: Id -> Maybe (Arity, StrictSig) -> Id
+annotateBotStr :: Id -> Maybe (Arity, StrictSig, ND.StrictSig) -> Id
 annotateBotStr id Nothing            = id
-annotateBotStr id (Just (arity,sig)) = id `setIdArity` arity
-				          `setIdStrictness` sig
+annotateBotStr id (Just (arity, sig, nd_sig)) = id `setIdArity` arity
+				                   `setIdStrictness` sig
+				                   `nd_setIdStrictness` nd_sig
 
 notWorthFloating :: CoreExprWithFVs -> [Var] -> Bool
 -- Returns True if the expression would be replaced by
@@ -820,7 +822,8 @@ lvlLamBndrs lvl bndrs
 \begin{code}
   -- Destination level is the max Id level of the expression
   -- (We'll abstract the type variables, if any.)
-destLevel :: LevelEnv -> VarSet -> Bool -> Maybe (Arity, StrictSig) -> Level
+destLevel :: LevelEnv -> VarSet -> Bool -> 
+             Maybe (Arity, StrictSig, ND.StrictSig) -> Level
 destLevel env fvs is_function mb_bot
   | Just {} <- mb_bot = tOP_LEVEL	-- Send bottoming bindings to the top 
 					-- regardless; see Note [Bottoming floats]
@@ -1069,7 +1072,7 @@ newPolyBndrs dest_lvl env abs_vars bndrs = do
 			     poly_ty = mkPiTypes abs_vars (idType bndr)
 
 newLvlVar :: [CoreBndr] -> Type 	-- Abstract wrt these bndrs
-	  -> Maybe (Arity, StrictSig)   -- Note [Bottoming floats]
+	  -> Maybe (Arity, StrictSig, ND.StrictSig)   -- Note [Bottoming floats]
 	  -> LvlM Id
 newLvlVar vars body_ty mb_bot
   = do { uniq <- getUniqueM
@@ -1079,9 +1082,11 @@ newLvlVar vars body_ty mb_bot
     arity = count isId vars
     info = case mb_bot of
 		Nothing               -> vanillaIdInfo
-		Just (bot_arity, sig) -> vanillaIdInfo 
-					   `setArityInfo`      (arity + bot_arity)
-					   `setStrictnessInfo` Just (increaseStrictSigArity arity sig)
+		Just (bot_arity, sig, nd_sig) -> 
+                     vanillaIdInfo 
+		    `setArityInfo`      (arity + bot_arity)
+		    `setStrictnessInfo` Just (increaseStrictSigArity arity sig)
+		    `nd_setStrictnessInfo` (ND.increaseStrictSigArity arity nd_sig)
     
 -- The deeply tiresome thing is that we have to apply the substitution
 -- to the rules inside each Id.  Grr.  But it matters.

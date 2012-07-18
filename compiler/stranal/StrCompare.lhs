@@ -24,7 +24,8 @@ comparePgm dflags binds  = do
 	let table    = traverseBinds [] binds
             rendered = map (liftTup4 $ rendr dflags) $ reverse table
             tuples = init_res ++ rendered
-            maxs   = foldl (\(a, b, c, d) (w, x, y, z) -> (max a w, max b x, max c y, max d z)) 
+            maxs   = foldl (\(a, b, c, d) (w, x, y, z) -> 
+                                 (max a w, max b x, max c y, max d z)) 
                            (0, 0, 0, 0)
                            (map (liftTup4 length) tuples)
                            
@@ -35,7 +36,7 @@ comparePgm dflags binds  = do
 
 	return binds
      where 
-        init_res :: Result String
+        init_res :: [Result String]
         init_res = [("Id", "Old Signature", "Old as new", "New Signature"), ("", "", "", "")]
 
 type Result a = (a, a, a, a)

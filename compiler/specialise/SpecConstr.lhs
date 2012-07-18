@@ -49,6 +49,7 @@ import DynFlags		( DynFlags(..) )
 import StaticFlags	( opt_PprStyle_Debug )
 import Maybes		( orElse, catMaybes, isJust, isNothing )
 import Demand
+import qualified NewDemand as ND
 import DmdAnal		( both )
 import Serialized       ( deserializeWithData )
 import Util
@@ -1400,9 +1401,11 @@ spec_one env fn arg_bndrs body (call_pat@(qvars, pats), rule_number)
 
 		-- And build the results
 	; let spec_id = mkLocalId spec_name (mkPiTypes spec_lam_args body_ty) 
-	      		     `setIdStrictness` spec_str    	-- See Note [Transfer strictness]
+	      		     `setIdStrictness` spec_str   -- See Note [Transfer strictness]
+	      		     `nd_setIdStrictness` nd_spec_str
 			     `setIdArity` count isId spec_lam_args
-	      spec_str   = calcSpecStrictness fn spec_lam_args pats
+	      spec_str      = calcSpecStrictness fn spec_lam_args pats
+              nd_spec_str   = nd_calcSpecStrictness fn spec_lam_args pats
 	      (spec_lam_args, spec_call_args) = mkWorkerArgs qvars body_ty
 	      	-- Usual w/w hack to avoid generating 
 	      	-- a spec_rhs of unlifted type and no args
@@ -1437,6 +1440,33 @@ calcSpecStrictness fn qvars pats
     go_one env (Box d)   e = go_one env d e
     go_one env (Eval (Prod ds)) e 
     	   | (Var _, args) <- collectArgs e = go env ds args
+    go_one env _         _ = env
+
+
+nd_calcSpecStrictness :: Id 		     -- The original function
+                      -> [Var] -> [CoreExpr]    -- Call pattern
+  		      -> ND.StrictSig              -- Strictness of specialised thing
+-- See Note [Transfer strictness]
+nd_calcSpecStrictness fn qvars pats
+  = ND.StrictSig (ND.mkTopDmdType spec_dmds ND.topRes)
+  where
+    spec_dmds = [ lookupVarEnv dmd_env qv `orElse` ND.top | qv <- qvars, isId qv ]
+    ND.StrictSig (ND.DmdType _ dmds _) = nd_idStrictness fn
+
+    dmd_env = go emptyVarEnv dmds pats
+
+    go :: ND.DmdEnv -> [ND.Demand] -> [CoreExpr] -> ND.DmdEnv
+    go env ds (Type {} : pats) = go env ds pats
+    go env ds (Coercion {} : pats) = go env ds pats
+    go env (d:ds) (pat : pats) = go (go_one env d pat) ds pats
+    go env _      _            = env
+
+    go_one :: ND.DmdEnv -> ND.Demand -> CoreExpr -> ND.DmdEnv
+    go_one env d   (Var v) = extendVarEnv_C ND.both env v d
+    go_one env d e 
+    	   | ND.isProdDmd d
+           , ds <- ND.splitProdDmd d
+           , (Var _, args) <- collectArgs e = go env ds args
     go_one env _         _ = env
 
 \end{code}
