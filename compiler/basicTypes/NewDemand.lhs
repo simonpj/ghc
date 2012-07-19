@@ -724,7 +724,6 @@ botDmdType = DmdType emptyDmdEnv [] botRes
 cprDmdType = DmdType emptyDmdEnv [] cprRes
 
 isTopDmdType :: DmdType -> Bool
--- Only used on top-level types, hence the assert
 isTopDmdType (DmdType env [] res)
              | isTopRes res && isEmptyVarEnv env = True	
 isTopDmdType _                                   = False
