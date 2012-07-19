@@ -30,7 +30,7 @@ comparePgm better dflags binds  = do
                            (0, 0, 0, 0)
                            (map (liftTup4 length) tuples)
             header | Just True   <- better  = "          Strictly better new results         "
-                   | Just False  <- better  = "          Strictly better new results         "
+                   | Just False  <- better  = "          Strictly worse new results          "
                    | Nothing     <- better  = "          Strangely different results         "
                    | otherwise              = ""
                            
