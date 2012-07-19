@@ -236,7 +236,7 @@ cprDmdType = DmdType emptyVarEnv [] retCPR
 
 isTopDmdType :: DmdType -> Bool
 -- Only used on top-level types, hence the assert
-isTopDmdType (DmdType env [] TopRes) = True	
+isTopDmdType (DmdType env [] TopRes) = isEmptyVarEnv env
 isTopDmdType _                       = False
 
 isBotRes :: DmdResult -> Bool
@@ -370,7 +370,7 @@ dsToDmd (Poly d)   = [toNewDmd d]
 toNewRes :: DmdResult -> ND.DmdResult
 toNewRes d
    | isBotRes d   = ND.botRes
-   | RetCPR d     = ND.cprRes
+   | returnsCPR d     = ND.cprRes
    | otherwise    = ND.topRes
 
 toNewDmdTy :: DmdType -> ND.DmdType

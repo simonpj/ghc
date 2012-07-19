@@ -725,7 +725,7 @@ cprDmdType = DmdType emptyDmdEnv [] cprRes
 
 isTopDmdType :: DmdType -> Bool
 isTopDmdType (DmdType env [] res)
-             | isTopRes res && isEmptyVarEnv env = True	
+             | isTopRes res && isEmptyVarEnv env = True
 isTopDmdType _                                   = False
 
 mkDmdType :: DmdEnv -> [Demand] -> DmdResult -> DmdType
