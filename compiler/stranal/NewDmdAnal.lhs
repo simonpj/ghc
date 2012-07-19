@@ -871,7 +871,7 @@ extendSigsWithLam :: AnalEnv -> Id -> AnalEnv
 extendSigsWithLam env id
   | ae_virgin env        = extendAnalEnv NotTopLevel env id cprSig
        -- See Note [Optimistic CPR in the "virgin" case]
-  | isStrictDmd dmd_info
+  | isProdDmd dmd_info
   , Just(tc) <- tc_mb
   , isProductTyCon tc    = extendAnalEnv NotTopLevel env id cprSig
        -- See Note [Initial CPR for strict binders]

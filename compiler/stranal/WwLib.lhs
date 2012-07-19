@@ -17,13 +17,13 @@ module WwLib ( mkWwBodies, mkWWstr, mkWorkerArgs ) where
 
 import CoreSyn
 import CoreUtils	( exprType )
-import Id		( Id, idType, mkSysLocal, idDemandInfo, setIdDemandInfo,
+import Id		( Id, idType, mkSysLocal, idDemandInfo, setIdDemandInfo, nd_setIdDemandInfo,
 			  isOneShotLambda, setOneShotLambda, setIdUnfolding,
                           setIdInfo
 			)
 import IdInfo		( vanillaIdInfo )
 import DataCon
-import Demand		( Demand(..), DmdResult(..), Demands(..) ) 
+import Demand		( Demand(..), DmdResult(..), Demands(..), toNewDmd ) 
 import MkCore		( mkRuntimeErrorApp, aBSENT_ERROR_ID )
 import MkId		( realWorldPrimId, voidArgId, 
                           mkUnpackCase, mkProductBox )
@@ -298,7 +298,8 @@ applyToVars vars fn = mkVarApps fn vars
 
 mk_wrap_arg :: Unique -> Type -> Demand -> Bool -> Id
 mk_wrap_arg uniq ty dmd one_shot 
-  = set_one_shot one_shot (setIdDemandInfo (mkSysLocal (fsLit "w") uniq ty) dmd)
+  = set_one_shot one_shot ((mkSysLocal (fsLit "w") uniq ty) `setIdDemandInfo`    dmd
+                                                            `nd_setIdDemandInfo` (toNewDmd dmd))
   where
     set_one_shot True  id = setOneShotLambda id
     set_one_shot False id = id
@@ -405,7 +406,8 @@ mkWWstr_one dflags arg
 	-- If the wrapper argument is a one-shot lambda, then
 	-- so should (all) the corresponding worker arguments be
 	-- This bites when we do w/w on a case join point
-    set_worker_arg_info worker_arg demand = set_one_shot (setIdDemandInfo worker_arg demand)
+    set_worker_arg_info worker_arg demand = set_one_shot (worker_arg `setIdDemandInfo` demand
+                                                                     `nd_setIdDemandInfo` (toNewDmd demand))
 
     set_one_shot | isOneShotLambda arg = setOneShotLambda
 		 | otherwise	       = \x -> x

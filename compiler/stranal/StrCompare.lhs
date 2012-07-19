@@ -59,16 +59,16 @@ traverseBinds better acc binds
 record :: Maybe Bool -> Acc -> Id -> Acc
 record better acc id
   | old' == new                      = acc
-  | Just b <- better
-  , b && (new `pre` old')            = rdoc : acc
+  | Just True <- better
     -- new results are strictly better
-  | Just b <- better          
-  , (not b) && (old' `pre` new)      = rdoc : acc
-      -- new results are strictly worse
+  , (new `pre` old')                 = rdoc : acc
+  | Just False <- better          
+     -- new results are strictly worse
+  , (old' `pre` new)                 = rdoc : acc
   | Nothing <- better          
+      -- uncomparable results
   , not (old' `pre` new || new `pre` old')
                                      = rdoc : acc 
-      -- uncomparable results
   | otherwise                        = acc
   where
       name                 = varName id

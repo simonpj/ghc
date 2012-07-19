@@ -287,9 +287,10 @@ tryWW dflags is_rec fn_id rhs
 	--	(c) it becomes incorrect as things are cloned, because
 	--	    we don't push the substitution into it
     new_fn_id | isEmptyVarEnv env = fn_id
-	      | otherwise	  = fn_id `setIdStrictness` 
-				     StrictSig (mkTopDmdType wrap_dmds res_info)
+	      | otherwise	  = fn_id `setIdStrictness`    sig
+                                          `nd_setIdStrictness` (toNewDmdSig sig)
 
+    sig       = StrictSig (mkTopDmdType wrap_dmds res_info)
     is_fun    = notNull wrap_dmds
     is_thunk  = not is_fun && not (exprIsHNF rhs)
 
@@ -341,14 +342,16 @@ splitFun dflags fn_id fn_info wrap_dmds res_info rhs
 				-- not w/wd). However, the RuleMatchInfo is not transferred since
                                 -- it does not make sense for workers to be constructorlike.
 
-			`setIdStrictness` StrictSig (mkTopDmdType work_demands work_res_info)
+			`setIdStrictness` sig
+                        `nd_setIdStrictness` (toNewDmdSig sig)
 				-- Even though we may not be at top level, 
 				-- it's ok to give it an empty DmdEnv
 
                         `setIdArity` (exprArity work_rhs)
                                 -- Set the arity so that the Core Lint check that the 
                                 -- arity is consistent with the demand type goes through
-
+                                
+        sig       = StrictSig (mkTopDmdType work_demands work_res_info)
 	wrap_rhs  = wrap_fn work_id
 	wrap_prag = InlinePragma { inl_inline = Inline
                                  , inl_sat    = Nothing
