@@ -205,6 +205,7 @@ getCoreToDo dflags
                            CoreDoNewStrictness,
                            CoreDoCompareBetter,
                            CoreDoCompareWorse,
+                           CoreDoCompareDiff,
                            CoreDoWorkerWrapper,
                            simpl_phase 0 ["post-worker-wrapper"] max_iter
                         ])
@@ -410,10 +411,13 @@ doCorePass _      CoreDoNewStrictness       = {-# SCC "NewStranal" #-}
                                               doPassDM dmdAnalProgram
 
 doCorePass _      CoreDoCompareBetter       = {-# SCC "StrCompare" #-}
-                                              doPassDM $ comparePgm True
+                                              doPassDM $ comparePgm $ Just True
 
 doCorePass _      CoreDoCompareWorse        = {-# SCC "StrCompare" #-}
-                                              doPassDM $ comparePgm False
+                                              doPassDM $ comparePgm $ Just False
+
+doCorePass _      CoreDoCompareDiff         = {-# SCC "StrCompare" #-}
+                                              doPassDM $ comparePgm Nothing
 
 doCorePass dflags CoreDoWorkerWrapper       = {-# SCC "WorkWrap" #-}
                                               if new_ww

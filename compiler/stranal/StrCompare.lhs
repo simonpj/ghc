@@ -20,7 +20,7 @@ import DynFlags
 import Demand        ( toNewDmdSig )
 import NewDemand as ND
 
-comparePgm :: Bool -> DynFlags -> CoreProgram -> IO CoreProgram
+comparePgm :: Maybe Bool -> DynFlags -> CoreProgram -> IO CoreProgram
 comparePgm better dflags binds  = do 
 	let table    = traverseBinds better [] binds
             rendered = map (liftTup4 $ rendr dflags) $ reverse table
@@ -29,9 +29,10 @@ comparePgm better dflags binds  = do
                                  (max a w, max b x, max c y, max d z)) 
                            (0, 0, 0, 0)
                            (map (liftTup4 length) tuples)
-            header = if better
-                     then "          Strictly better new results         "               
-                     else "          Strictly worse new results          "
+            header | Just True   <- better  = "          Strictly better new results         "
+                   | Just False  <- better  = "          Strictly better new results         "
+                   | Nothing     <- better  = "          Strangely different results         "
+                   | otherwise              = ""
                            
         if length table > 0 
            -- Display only if something interesting found
@@ -50,16 +51,24 @@ comparePgm better dflags binds  = do
 type Result a = (a, a, a, a)
 type Acc  = [Result SDoc]
 
-traverseBinds :: Bool -> Acc -> CoreProgram -> Acc
+traverseBinds :: Maybe Bool -> Acc -> CoreProgram -> Acc
 traverseBinds better acc binds
   = let binders = bindersOfBinds binds
      in foldl (record better) acc binders
 
-record :: Bool -> Acc -> Id -> Acc
+record :: Maybe Bool -> Acc -> Id -> Acc
 record better acc id
   | old' == new                      = acc
-  | better && (new `pre` old')       = rdoc : acc
-  | (not better) && (old' `pre` new) = rdoc : acc
+  | Just b <- better
+  , b && (new `pre` old')            = rdoc : acc
+    -- new results are strictly better
+  | Just b <- better          
+  , (not b) && (old' `pre` new)      = rdoc : acc
+      -- new results are strictly worse
+  | Nothing <- better          
+  , not (old' `pre` new || new `pre` old')
+                                     = rdoc : acc 
+      -- uncomparable results
   | otherwise                        = acc
   where
       name                 = varName id

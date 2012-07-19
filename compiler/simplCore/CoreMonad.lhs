@@ -248,6 +248,7 @@ data CoreToDo           -- These are diff core-to-core passes,
   | CoreDoNewStrictness
   | CoreDoCompareBetter
   | CoreDoCompareWorse
+  | CoreDoCompareDiff
   | CoreDoWorkerWrapper
   | CoreDoSpecialising
   | CoreDoSpecConstr
@@ -293,6 +294,7 @@ coreDumpFlag CoreDoNothing           = Nothing
 coreDumpFlag (CoreDoPasses {})       = Nothing
 coreDumpFlag CoreDoCompareBetter     = Nothing
 coreDumpFlag CoreDoCompareWorse      = Nothing
+coreDumpFlag CoreDoCompareDiff       = Nothing
 
 
 instance Outputable CoreToDo where
@@ -306,6 +308,7 @@ instance Outputable CoreToDo where
   ppr CoreDoNewStrictness      = ptext (sLit "New demand analysis")
   ppr CoreDoCompareBetter      = ptext (sLit "Demand comparison (if new is better)")
   ppr CoreDoCompareWorse       = ptext (sLit "Demand comparison (if new is worse)")
+  ppr CoreDoCompareDiff        = ptext (sLit "Demand comparison (results are different)")
   ppr CoreDoWorkerWrapper      = ptext (sLit "Worker Wrapper binds")
   ppr CoreDoSpecialising       = ptext (sLit "Specialise")
   ppr CoreDoSpecConstr         = ptext (sLit "SpecConstr")
