@@ -868,28 +868,63 @@ nonVirgin sigs = AE { ae_sigs = sigs, ae_virgin = False }
 
 extendSigsWithLam :: AnalEnv -> Id -> AnalEnv
 -- Extend the AnalEnv when we meet a lambda binder
--- If the binder is marked demanded with a product demand, then give it a CPR 
--- signature, because in the likely event that this is a lambda on a fn defn 
--- [we only use this when the lambda is being consumed with a call demand],
--- it'll be w/w'd and so it will be CPR-ish.  E.g.
---	f = \x::(Int,Int).  if ...strict in x... then
---				x
---			    else
---				(a,b)
--- We want f to have the CPR property because x does, by the time f has been w/w'd
---
--- Also note that we only want to do this for something that
--- definitely has product type, else we may get over-optimistic 
--- CPR results (e.g. from \x -> x!).
-
--- See Note [Optimistic CPR in the "virgin" case]
 extendSigsWithLam env id
-    -- is it too conservative?
-  = if (ae_virgin env) || (isProdDmd $ nd_idDemandInfo id)
-    then extendAnalEnv NotTopLevel env id cprSig
-    else env
+  | ae_virgin env        = extendAnalEnv NotTopLevel env id cprSig
+       -- See Note [Optimistic CPR in the "virgin" case]
+  | isStrictDmd dmd_info
+  , Just(tc) <- tc_mb
+  , isProductTyCon tc    = extendAnalEnv NotTopLevel env id cprSig
+       -- See Note [Initial CPR for strict binders]
+  | otherwise            = env
+  where
+    dmd_info = nd_idDemandInfo id
+    tpe = idType id
+    tc_mb = tyConAppTyCon_maybe tpe
 
 \end{code}
+
+Note [Initial CPR for strict binders]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+CPR is initialized for lambda binder in an optimistic manner, so if
+the binder is used strictly with a product demand and it is of a
+product type.
+
+If the binder is marked demanded with a product demand, then give it a
+CPR signature, because in the likely event that this is a lambda on a
+fn defn [we only use this when the lambda is being consumed with a
+call demand], it'll be w/w'd and so it will be CPR-ish.  E.g.
+
+	f = \x::(Int,Int).  if ...strict in x... then
+				x
+			    else
+				(a,b)
+We want f to have the CPR property because x does, by the time f has been w/w'd
+
+Also note that we only want to do this for something that definitely
+has product type, else we may get over-optimistic CPR results
+(e.g. from \x -> x!).
+
+The following example demonstrates a function lgo_sfN from some
+real-life code, such that the variable x_aeS is of product type and is
+used with a strict product demand.
+
+lgo_sfN =
+  \ (z_aeQ [Dmd=Just <S,U>] :: Event.Event)
+    (ds_dfr [Dmd=Just <S,U>] :: [Event.Event]) ->
+    case ds_dfr of _ {
+      [] -> z_aeQ;
+      : x_aeS [Dmd=Just <S,H>]
+        xs_aeT [Dmd=Just <S,U>] ->
+          case z_aeQ of _ { Event.Event a_aeV [Dmd=Just <L,U> | Just L] ->
+          case x_aeS
+          of _
+          { Event.Event b_aeW [Dmd=Just <L,A>] ->
+            lgo_sfN (Event.Event a_aeV) xs_aeT
+          }
+        }
+    }
+
 
 Note [Initialising strictness]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
