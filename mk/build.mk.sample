@@ -175,10 +175,10 @@ endif
 
 ifeq "$(BuildFlavour)" "newdmd"
 
-SRC_HC_OPTS        = -H64m -O -fasm
+SRC_HC_OPTS        = -H64m -O -fasm 
 GhcLibHcOpts       = -O -dcore-lint -XNewDemandAnalyser -XNewWorkerWrapper
 GhcStage1HcOpts    = -Rghc-timing -O -fasm 
-GhcStage2HcOpts    = -Rghc-timing -O0 -DDEBUG -Werror
+GhcStage2HcOpts    = -Rghc-timing -O0 -DDEBUG -XNewDemandAnalyser -XNewWorkerWrapper -Werror
 SplitObjs          = NO
 HADDOCK_DOCS       = NO
 BUILD_DOCBOOK_HTML = NO

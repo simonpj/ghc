@@ -28,7 +28,7 @@ import Coercion
 import TcEnv
 import TcRnMonad
 import TyCon
-import Demand
+import NewDemand
 import Var
 import VarSet
 import VarEnv
@@ -340,7 +340,7 @@ cpeBind :: TopLevelFlag
         -> UniqSM (CorePrepEnv, Floats)
 cpeBind top_lvl env (NonRec bndr rhs)
   = do { (_, bndr1) <- cpCloneBndr env bndr
-       ; let is_strict   = isStrictDmd (idDemandInfo bndr)
+       ; let is_strict   = isStrictDmd (nd_idDemandInfo bndr)
              is_unlifted = isUnLiftedType (idType bndr)
        ; (floats, bndr2, rhs2) <- cpePair top_lvl NonRecursive
                                           (is_strict || is_unlifted)
@@ -640,7 +640,7 @@ cpeApp env expr
            ; let
               (ss1, ss_rest)   = case ss of
                                    (ss1:ss_rest) -> (ss1,     ss_rest)
-                                   []            -> (lazyDmd, [])
+                                   []            -> (top, [])
               (arg_ty, res_ty) = expectJust "cpeBody:collect_args" $
                                  splitFunTy_maybe fun_ty
 
@@ -652,7 +652,7 @@ cpeApp env expr
            ; let v2 = lookupCorePrepEnv env v1
            ; return (Var v2, (Var v2, depth), idType v2, emptyFloats, stricts) }
         where
-          stricts = case idStrictness v of
+          stricts = case nd_idStrictness v of
                         StrictSig (DmdType _ demands _)
                             | listLengthCmp demands depth /= GT -> demands
                                     -- length demands <= depth

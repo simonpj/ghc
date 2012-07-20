@@ -420,12 +420,9 @@ doCorePass _      CoreDoCompareDiff         = {-# SCC "StrCompare" #-}
                                               doPassDM $ comparePgm Nothing
 
 doCorePass dflags CoreDoWorkerWrapper       = {-# SCC "WorkWrap" #-}
-                                              if new_ww
+                                              if withNewDemand dflags 
                                               then doPassU (NWW.wwTopBinds dflags)
                                               else doPassU (wwTopBinds dflags)
-                                              where
-                                                new_ww = xopt Opt_NewDemandAnalyser dflags &&
-                                                         xopt Opt_NewWorkerWrapper  dflags
 
 doCorePass dflags CoreDoSpecialising        = {-# SCC "Specialise" #-}
                                               specProgram dflags
@@ -950,3 +947,4 @@ transferIdInfo exported_id local_id
         -- Remember to set the function-name field of the
         -- rules as we transfer them from one function to another
 \end{code}
+

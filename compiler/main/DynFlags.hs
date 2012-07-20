@@ -110,6 +110,7 @@ module DynFlags (
 #endif
         -- ** Only for use in the tracing functions in Outputable
         tracingDynFlags,
+        withNewDemand, 
   ) where
 
 #include "HsVersions.h"
@@ -2842,4 +2843,10 @@ compilerInfo dflags
        ("Gcc Linker flags",            show cGccLinkerOpts),
        ("Ld Linker flags",             show cLdLinkerOpts)
       ]
+
+-- -----------------------------------------------------------------------------
+-- Demand analysis
+withNewDemand :: DynFlags -> Bool
+withNewDemand dflags = xopt Opt_NewDemandAnalyser dflags &&
+                       xopt Opt_NewWorkerWrapper  dflags
 

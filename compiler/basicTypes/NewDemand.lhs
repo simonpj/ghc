@@ -15,7 +15,8 @@ module NewDemand (
 	DmdType(..), topDmdType, botDmdType, mkDmdType, mkTopDmdType, 
 		dmdTypeDepth, 
 	DmdEnv, emptyDmdEnv,
-	DmdResult(..), CPRResult(..), isBotRes, isTopRes, resTypeArgDmd, topRes, botRes, cprRes,
+	DmdResult(..), CPRResult(..), isBotRes, isTopRes, resTypeArgDmd, 
+        topRes, botRes, cprRes,
         appIsBottom, isBottomingSig, pprIfaceStrictSig, returnsCPR, 
 	StrictSig(..), mkStrictSig, topSig, botSig, cprSig,
         isTopSig, splitStrictSig, increaseStrictSigArity,
@@ -26,7 +27,7 @@ module NewDemand (
         someCompUsed, isUsed, isUsedDmd,
         defer, use, deferType, deferEnv, modifyEnv,
         isProdDmd, isPolyDmd, replicateDmd, splitProdDmd, peelCallDmd, mkCallDmd,
-        isProdUsage,
+        isProdUsage, 
      ) where
 
 #include "HsVersions.h"
@@ -833,6 +834,9 @@ increaseStrictSigArity arity_increase (StrictSig (DmdType env dmds res))
 isTopSig :: StrictSig -> Bool
 isTopSig (StrictSig ty) = isTopDmdType ty
 
+isBottomingSig :: StrictSig -> Bool
+isBottomingSig (StrictSig (DmdType _ _ res)) = isBotRes res
+
 topSig, botSig, cprSig:: StrictSig
 topSig = StrictSig topDmdType
 botSig = StrictSig botDmdType
@@ -866,11 +870,6 @@ appIsBottom (StrictSig (DmdType _ ds res)) n
             | isBotRes res                      = not $ lengthExceeds ds n 
 appIsBottom _				      _ = False
 
-isBottomingSig :: StrictSig -> Bool
-isBottomingSig (StrictSig (DmdType _ _ res))    
-               | isBotRes res                   = True
-isBottomingSig _				= False
-
 seqStrictSig :: StrictSig -> ()
 seqStrictSig (StrictSig ty) = seqDmdType ty
 
@@ -879,3 +878,4 @@ pprIfaceStrictSig :: StrictSig -> SDoc
 pprIfaceStrictSig (StrictSig (DmdType _ dmds res))
   = hcat (map ppr dmds) <> ppr res
 \end{code}
+

@@ -34,6 +34,7 @@ import CoreMonad
 import Literal		( litIsLifted )
 import HscTypes         ( ModGuts(..) )
 import WwLib		( mkWorkerArgs )
+import qualified NewWwLib as NWW ( mkWorkerArgs )
 import DataCon
 import Coercion		hiding( substTy, substCo )
 import Rules
@@ -45,7 +46,7 @@ import VarEnv
 import VarSet
 import Name
 import BasicTypes
-import DynFlags		( DynFlags(..) )
+import DynFlags		( DynFlags(..), withNewDemand )
 import StaticFlags	( opt_PprStyle_Debug )
 import Maybes		( orElse, catMaybes, isJust, isNothing )
 import Demand
@@ -1406,7 +1407,10 @@ spec_one env fn arg_bndrs body (call_pat@(qvars, pats), rule_number)
 			     `setIdArity` count isId spec_lam_args
 	      spec_str      = calcSpecStrictness fn spec_lam_args pats
               nd_spec_str   = nd_calcSpecStrictness fn spec_lam_args pats
-	      (spec_lam_args, spec_call_args) = mkWorkerArgs qvars body_ty
+                -- Conditionally use result of new worker-wrapper transform
+	      (spec_lam_args, spec_call_args) = if withNewDemand dflags 
+                                                then NWW.mkWorkerArgs qvars body_ty
+                                                else mkWorkerArgs qvars body_ty
 	      	-- Usual w/w hack to avoid generating 
 	      	-- a spec_rhs of unlifted type and no args
 
@@ -1821,4 +1825,5 @@ differ only in their type arguments!  Not only is it utterly useless,
 but it also means that (with polymorphic recursion) we can generate
 an infinite number of specialisations. Example is Data.Sequence.adjustTree, 
 I think.
+
 
