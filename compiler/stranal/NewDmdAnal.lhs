@@ -871,15 +871,12 @@ extendSigsWithLam :: AnalEnv -> Id -> AnalEnv
 extendSigsWithLam env id
   | ae_virgin env        = extendAnalEnv NotTopLevel env id cprSig
        -- See Note [Optimistic CPR in the "virgin" case]
-  | isProdDmd dmd_info
-  , Just(tc) <- tc_mb
-  , isProductTyCon tc    = extendAnalEnv NotTopLevel env id cprSig
+  | isStrictDmd dmd_info
+  , isProdUsage dmd_info = extendAnalEnv NotTopLevel env id cprSig
        -- See Note [Initial CPR for strict binders]
   | otherwise            = env
   where
     dmd_info = nd_idDemandInfo id
-    tpe = idType id
-    tc_mb = tyConAppTyCon_maybe tpe
 
 \end{code}
 
@@ -887,10 +884,10 @@ Note [Initial CPR for strict binders]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 CPR is initialized for lambda binder in an optimistic manner, so if
-the binder is used strictly with a product demand and it is of a
-product type.
+the binder is used strictly and at least some of its components as a
+prodoct are used, which is checked by the value ob the absense demand.
 
-If the binder is marked demanded with a product demand, then give it a
+If the binder is marked demanded with a strict demand, then give it a
 CPR signature, because in the likely event that this is a lambda on a
 fn defn [we only use this when the lambda is being consumed with a
 call demand], it'll be w/w'd and so it will be CPR-ish.  E.g.

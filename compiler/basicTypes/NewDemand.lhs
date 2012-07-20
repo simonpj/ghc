@@ -26,6 +26,7 @@ module NewDemand (
         someCompUsed, isUsed, isUsedDmd,
         defer, use, deferType, deferEnv, modifyEnv,
         isProdDmd, isPolyDmd, replicateDmd, splitProdDmd, peelCallDmd, mkCallDmd,
+        isProdUsage,
      ) where
 
 #include "HsVersions.h"
@@ -209,10 +210,10 @@ isPolyStrDmd _        = False
 \begin{code}
 
 data AbsDmd
-  = Abs                  -- Defenitely unused
+  = Abs                  -- Definitely unused
   | Used                 -- May be used
   | UHead                -- U(A...A)
-  | UProd [AbsDmd]       -- Product
+  | UProd [AbsDmd]       -- Product [Invariant] not all components are absent
   deriving ( Eq, Show )
 
 
@@ -231,7 +232,7 @@ absTop     = Used
 
 absProd :: [AbsDmd] -> AbsDmd
 absProd ux 
-  | all (== Used) ux   = Used
+--  | all (== Used) ux   = Used
   | all (== Abs) ux    = UHead
   | otherwise          = UProd ux
 
@@ -376,6 +377,10 @@ instance Binary JointDmd where
 
 isStrictDmd :: Demand -> Bool
 isStrictDmd (JD x _) = x /= top
+
+isProdUsage :: Demand -> Bool
+isProdUsage (JD {absD = (UProd _)}) = True
+isProdUsage _                     = False
 
 isUsedDmd :: Demand -> Bool
 isUsedDmd (JD _ x) = x /= bot
