@@ -464,7 +464,7 @@ worthSplittingFun ds res
   -- See Note [Worker-wrapper for bottoming functions]
   where
     worth_it d | isAbs d            = True	-- Absent arg
-    worth_it (JD (SProd _) a)       = isUsed a	-- Product arg to evaluate
+    worth_it (JD {strD=SProd _, absD=a})       = isUsed a	-- Product arg to evaluate
     worth_it _    	            = False
 
 worthSplittingThunk :: Demand	        -- Demand on the thunk
@@ -474,9 +474,9 @@ worthSplittingThunk dmd res
   = worth_it dmd || returnsCPR res
   where
 	-- Split if the thing is unpacked
-    worth_it (JD (SProd _ds) a)         = someCompUsed a   
+    worth_it (JD {strD=SProd _, absD=a}) = someCompUsed a   
         -- second component points out that at least some of     
-    worth_it _    	    	        = False
+    worth_it _    	    	         = False
 \end{code}
 
 Note [Worker-wrapper for bottoming functions]

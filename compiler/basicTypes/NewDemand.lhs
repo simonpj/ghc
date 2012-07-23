@@ -318,14 +318,14 @@ data JointDmd = JD { strD :: StrDmd, absD :: AbsDmd }
 
 -- Pretty-printing
 instance Outputable JointDmd where
-  ppr (JD s a) = angleBrackets (ppr s <> char ',' <> ppr a)
+  ppr (JD {strD = s, absD = a}) = angleBrackets (ppr s <> char ',' <> ppr a)
 
 -- Well-formedness preserving constructors for the joint domain
 mkJointDmd :: StrDmd -> AbsDmd -> JointDmd
 mkJointDmd s a 
  = case (s, a) of 
-     (HyperStr, UProd _) -> JD HyperStr Used
-     _                   -> JD s a
+     (HyperStr, UProd _) -> JD {strD = HyperStr, absD = Used}
+     _                   -> JD {strD = s, absD = a}
 
 mkProdDmd :: [JointDmd] -> JointDmd
 mkProdDmd dx 
@@ -340,29 +340,32 @@ instance LatticeLike JointDmd where
 
   pre x _ | x == bot         = True
   pre _ x | x == top         = True
-  pre (JD s1 a1) (JD s2 a2)  = (pre s1 s2) && (pre a1 a2)
+  pre (JD {strD = s1, absD = a1}) 
+      (JD {strD = s2, absD = a2})  = (pre s1 s2) && (pre a1 a2)
 
-  lub  (JD s1 a1) (JD s2 a2) = mkJointDmd (lub s1 s2)  $ lub a1 a2            
-  both (JD s1 a1) (JD s2 a2) = mkJointDmd (both s1 s2) $ both a1 a2            
+  lub  (JD {strD = s1, absD = a1}) 
+       (JD {strD = s2, absD = a2}) = mkJointDmd (lub s1 s2)  $ lub a1 a2            
+  both (JD {strD = s1, absD = a1}) 
+       (JD {strD = s2, absD = a2}) = mkJointDmd (both s1 s2) $ both a1 a2            
 
 isTop :: JointDmd -> Bool
-isTop (JD s a) | s == top && a == top = True
+isTop (JD {strD = Lazy, absD = Used}) = True
 isTop _                               = False 
 
 isBot :: JointDmd -> Bool
-isBot (JD s a) | s == bot && a == bot = True
-isBot _                               = False 
-
+isBot (JD {strD = HyperStr, absD = Abs}) = True
+isBot _                                  = False 
+  
 isAbs :: JointDmd -> Bool
-isAbs (JD s a) | s == top && a == bot = True
+isAbs (JD {strD = Lazy, absD = Abs})  = True
 isAbs _                               = False 
 
 absDmd :: JointDmd
-absDmd = JD top bot
+absDmd = JD {strD = top, absD = bot}
 
 -- More utility functions for strictness
 seqDemand :: JointDmd -> ()
-seqDemand (JD x y) = x `seq` y `seq` ()
+seqDemand (JD {strD = x, absD = y}) = x `seq` y `seq` ()
 
 seqDemandList :: [JointDmd] -> ()
 seqDemandList [] = ()
@@ -370,21 +373,21 @@ seqDemandList (d:ds) = seqDemand d `seq` seqDemandList ds
 
 -- Serialization
 instance Binary JointDmd where
-    put_ bh (JD x y) = do put_ bh x; put_ bh y
+    put_ bh (JD {strD = x, absD = y}) = do put_ bh x; put_ bh y
     get  bh = do 
               x <- get bh
               y <- get bh
               return $ mkJointDmd x y
 
 isStrictDmd :: Demand -> Bool
-isStrictDmd (JD x _) = x /= top
+isStrictDmd (JD {strD = x}) = x /= top
 
 isProdUsage :: Demand -> Bool
 isProdUsage (JD {absD = (UProd _)}) = True
 isProdUsage _                     = False
 
 isUsedDmd :: Demand -> Bool
-isUsedDmd (JD _ x) = x /= bot
+isUsedDmd (JD {absD = x}) = x /= bot
 
 isUsed :: AbsDmd -> Bool
 isUsed x = x /= bot
@@ -398,15 +401,16 @@ evalDmd :: JointDmd
 evalDmd = mkJointDmd strStr absTop
 
 mkCallDmd :: JointDmd -> JointDmd
-mkCallDmd (JD d a) = (JD (Call d) a)
+mkCallDmd (JD {strD = d, absD = a}) = JD {strD = Call d, absD = a}
 
 peelCallDmd :: JointDmd -> Maybe JointDmd
-peelCallDmd (JD (Call d) a) = Just $ JD d a
+peelCallDmd (JD {strD = Call d, absD = a}) 
+            = Just $ JD {strD = d, absD = a}
 peelCallDmd _               = Nothing 
 
 splitCallDmd :: JointDmd -> (Int, JointDmd)
-splitCallDmd (JD (Call d) a) 
-  = case splitCallDmd (JD d a) of
+splitCallDmd (JD {strD = Call d, absD = a}) 
+  = case splitCallDmd (JD {strD = d, absD = a}) of
       (n, r) -> (n + 1, r)
 splitCallDmd d	      = (0, d)
 
@@ -418,10 +422,10 @@ vanillaCall n =
    in mkJointDmd strComp absTop
 
 defer :: Demand -> Demand
-defer (JD _ a) = (JD top a)
+defer JD {absD = a} = JD {strD = top, absD = a}
 
 use :: Demand -> Demand
-use (JD d _) = (JD d top)
+use (JD {strD = d}) = JD {strD = d, absD = top}
 
 \end{code}
 
@@ -444,28 +448,28 @@ can be expanded to saturate a callee's arity.
 replicateDmd :: Int -> Demand -> [Demand]
 replicateDmd _ d
   | not $ isPolyDmd d   = pprPanic "replicateDmd" (ppr d)          
-replicateDmd n (JD x y) = zipWith JD (replicateStrDmd n x) 
-                                     (replicateAbsDmd n y)
+replicateDmd n (JD {strD=x, absD=y}) = zipWith mkJointDmd (replicateStrDmd n x) 
+                                                          (replicateAbsDmd n y)
 
 -- Check whether is a product demand
 isProdDmd :: Demand -> Bool
 --isProdDmd (JD Str a) | isUsed a  = True
-isProdDmd (JD (SProd _) _)       = True
-isProdDmd _                      = False
+isProdDmd (JD {strD = SProd _})     = True
+isProdDmd _                         = False
 
 isPolyDmd :: Demand -> Bool
-isPolyDmd (JD a b) = isPolyStrDmd a && isPolyAbsDmd b
+isPolyDmd (JD {strD=a, absD=b}) = isPolyStrDmd a && isPolyAbsDmd b
 
 -- Split a product to parameteres
 splitProdDmd :: Demand -> [Demand]
-splitProdDmd (JD (SProd sx) (UProd ux))
-  = ASSERT( sx `lengthIs` (length ux) ) zipWith JD sx ux
-splitProdDmd (JD (SProd sx) u) 
+splitProdDmd JD {strD=SProd sx, absD=UProd ux}
+  = ASSERT( sx `lengthIs` (length ux) ) zipWith mkJointDmd sx ux
+splitProdDmd JD {strD=SProd sx, absD=u} 
   | isPolyAbsDmd u  
-  =  zipWith JD sx (replicateAbsDmd (length sx) u)
-splitProdDmd (JD s (UProd ux))
+  =  zipWith mkJointDmd sx (replicateAbsDmd (length sx) u)
+splitProdDmd (JD {strD=s, absD=UProd ux})
   | isPolyStrDmd s  
-  =  zipWith JD (replicateStrDmd (length ux) s) ux
+  =  zipWith mkJointDmd (replicateStrDmd (length ux) s) ux
 splitProdDmd d = pprPanic "splitProdDmd" (ppr d)
 
 \end{code}
@@ -560,12 +564,12 @@ instance LatticeLike DmdResult where
 
 -- Pretty-printing
 instance Outputable DmdResult where
-  ppr (DR TopRes RetCPR) = char 'm'   --    DDDr without ambiguity
-  ppr (DR BotRes _) = char 'b'   
+  ppr (DR {res=TopRes, cpr=RetCPR}) = char 'm'   --    DDDr without ambiguity
+  ppr (DR {res=BotRes}) = char 'b'   
   ppr _ = empty	  -- Keep these distinct from Demand letters
 
 instance Binary DmdResult where
-    put_ bh (DR x y) = do put_ bh x; put_ bh y
+    put_ bh (DR {res=x, cpr=y}) = do put_ bh x; put_ bh y
     get  bh = do 
               x <- get bh
               y <- get bh
@@ -573,31 +577,31 @@ instance Binary DmdResult where
 
 mkDmdResult :: PureResult -> CPRResult -> DmdResult
 mkDmdResult BotRes RetCPR = botRes
-mkDmdResult x y = DR x y
+mkDmdResult x y = DR {res=x, cpr=y}
 
 seqDmdResult :: DmdResult -> ()
-seqDmdResult (DR x y) = x `seq` y `seq` ()
+seqDmdResult (DR {res=x, cpr=y}) = x `seq` y `seq` ()
 
 -- [cprRes] lets us switch off CPR analysis
 -- by making sure that everything uses TopRes instead of RetCPR
 -- Assuming, of course, that they don't mention RetCPR by name.
 -- They should onlyu use retCPR
 topRes, botRes, cprRes :: DmdResult
-topRes = DR TopRes NoCPR
-botRes = DR BotRes NoCPR
+topRes = mkDmdResult TopRes NoCPR
+botRes = mkDmdResult BotRes NoCPR
 cprRes | opt_CprOff = topRes
-       | otherwise  = DR TopRes RetCPR
+       | otherwise  = mkDmdResult TopRes RetCPR
 
 isTopRes :: DmdResult -> Bool
-isTopRes (DR TopRes NoCPR)  = True
+isTopRes (DR {res=TopRes, cpr=NoCPR})  = True
 isTopRes _                  = False
 
 isBotRes :: DmdResult -> Bool
-isBotRes (DR BotRes _)      = True
+isBotRes (DR {res=BotRes})      = True
 isBotRes _                  = False
 
 returnsCPR :: DmdResult -> Bool
-returnsCPR (DR TopRes RetCPR) = True
+returnsCPR (DR {res=TopRes, cpr=RetCPR}) = True
 returnsCPR _                  = False
 
 resTypeArgDmd :: DmdResult -> Demand
