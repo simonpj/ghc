@@ -324,7 +324,7 @@ splitFun dflags fn_id fn_info wrap_dmds res_info rhs
     ; work_uniq <- getUniqueM
     ; let
 	work_rhs = work_fn rhs
-	work_id  = mkWorkerId work_uniq fn_id (exprType work_rhs) 
+	work_id  = mkNewWorkerId work_uniq fn_id (exprType work_rhs) 
 		        `setIdOccInfo` occInfo fn_info
 				-- Copy over occurrence info from parent
 				-- Notably whether it's a loop breaker
@@ -463,9 +463,9 @@ worthSplittingFun ds res
 	-- and hence do_strict_ww is False if arity is zero and there is no CPR
   -- See Note [Worker-wrapper for bottoming functions]
   where
-    worth_it d | isAbs d            = True	-- Absent arg
-    worth_it (JD {strD=SProd _, absD=a})       = isUsed a	-- Product arg to evaluate
-    worth_it _    	            = False
+    worth_it d | isAbs d                = True	    -- Absent arg
+    worth_it (JD {strd=SProd _, absd=a})  = isUsed a  -- Product arg to evaluate
+    worth_it _    	                = False
 
 worthSplittingThunk :: Demand	        -- Demand on the thunk
 		    -> DmdResult	-- CPR info for the thunk
@@ -474,9 +474,9 @@ worthSplittingThunk dmd res
   = worth_it dmd || returnsCPR res
   where
 	-- Split if the thing is unpacked
-    worth_it (JD {strD=SProd _, absD=a}) = someCompUsed a   
+    worth_it (JD {strd=SProd _, absd=a}) = someCompUsed a   
         -- second component points out that at least some of     
-    worth_it _    	    	         = False
+    worth_it _           	       = False
 \end{code}
 
 Note [Worker-wrapper for bottoming functions]

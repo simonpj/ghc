@@ -89,7 +89,7 @@ dmdAnalTopBind sigs (Rec pairs)
 \begin{code}
 dmdAnal :: AnalEnv -> Demand -> CoreExpr -> (DmdType, CoreExpr)
 
-dmdAnal _ dmd e | isAbs(dmd)
+dmdAnal _ dmd e | isAbs dmd
   -- top demand does not provide any way to infer something interesting 
   = (topDmdType, e)
 

@@ -358,7 +358,7 @@ mkWWstr_one dflags arg
 	-- Absent case.  We can't always handle absence for arbitrary
         -- unlifted types, so we need to choose just the cases we can
 	-- (that's what mk_absent_let does)
-      JD {strD=Lazy, absD=Abs} | Just work_fn <- mk_absent_let dflags arg
+      JD {strd=Lazy, absd=Abs} | Just work_fn <- mk_absent_let dflags arg
           -> return ([], nop_fn, work_fn)
 
 	-- Unpack case
@@ -379,7 +379,7 @@ mkWWstr_one dflags arg
 
 	-- `seq` demand; evaluate in wrapper in the hope
 	-- of dropping seqs in the worker
-      JD {strD=Str, absD=UHead}
+      JD {strd=Str, absd=UHead}
 	-> let
 		arg_w_unf = arg `setIdUnfolding` evaldUnfolding
 		-- Tell the worker arg that it's sure to be evaluated

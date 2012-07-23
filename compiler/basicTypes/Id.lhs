@@ -38,7 +38,7 @@ module Id (
 	mkLocalId, mkLocalIdWithInfo, mkExportedLocalId,
 	mkSysLocal, mkSysLocalM, mkUserLocal, mkUserLocalM,
 	mkTemplateLocals, mkTemplateLocalsNum, mkTemplateLocal,
-	mkWorkerId, mkWiredInIdName,
+	mkWorkerId, mkNewWorkerId, mkWiredInIdName,
 
 	-- ** Taking an Id apart
 	idName, idType, idUnique, idInfo, idDetails, idRepArity,
@@ -296,6 +296,10 @@ instantiated before use.
 mkWorkerId :: Unique -> Id -> Type -> Id
 mkWorkerId uniq unwrkr ty
   = mkLocalId (mkDerivedInternalName mkWorkerOcc uniq (getName unwrkr)) ty
+
+mkNewWorkerId :: Unique -> Id -> Type -> Id
+mkNewWorkerId uniq unwrkr ty
+  = mkLocalId (mkDerivedInternalName mkNewWorkerOcc uniq (getName unwrkr)) ty
 
 -- | Create a /template local/: a family of system local 'Id's in bijection with @Int@s, typically used in unfoldings
 mkTemplateLocal :: Int -> Type -> Id
