@@ -424,7 +424,7 @@ use (JD {strd = d}) = mkJointDmd d top
 Note [Dealing with call demands]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Call demands are ocnstructed and deconstructed coherently for
+Call demands are constructed and deconstructed coherently for
 strictness and absence. For instance, the strictness signature for the
 following function
 
