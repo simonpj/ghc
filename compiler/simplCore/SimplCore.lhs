@@ -201,11 +201,11 @@ getCoreToDo dflags
     
     -- plug in new demand analyser
     new_demand_phases = (CoreDoPasses [
-                           CoreDoStrictness,
+                           -- CoreDoStrictness,
                            CoreDoNewStrictness,
-                           CoreDoCompareBetter,
-                           CoreDoCompareWorse,
-                           CoreDoCompareDiff,
+                           -- CoreDoCompareBetter,
+                           -- CoreDoCompareWorse,
+                           -- CoreDoCompareDiff,
                            CoreDoWorkerWrapper,
                            simpl_phase 0 ["post-worker-wrapper"] max_iter
                         ])
