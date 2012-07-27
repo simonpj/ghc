@@ -397,7 +397,8 @@ isStrictDmd (JD {strd = x}) = x /= top
 
 isProdUsage :: Demand -> Bool
 isProdUsage (JD {absd = (UProd _)}) = True
-isProdUsage _                      = False
+-- isProdUsage (JD {absd = Used})      = True
+isProdUsage _                       = False
 
 isUsedDmd :: Demand -> Bool
 isUsedDmd (JD {absd = x}) = x /= bot

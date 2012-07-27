@@ -872,6 +872,8 @@ extendSigsWithLam env id
   | ae_virgin env        = extendAnalEnv NotTopLevel env id cprSig
        -- See Note [Optimistic CPR in the "virgin" case]
   | isStrictDmd dmd_info
+  -- , Just tycon <- tyConAppTyCon_maybe (idType id)
+  -- , isProductTyCon tycon
   , isProdUsage dmd_info = extendAnalEnv NotTopLevel env id cprSig
        -- See Note [Initial CPR for strict binders]
   | otherwise            = env

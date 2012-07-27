@@ -2847,6 +2847,5 @@ compilerInfo dflags
 -- -----------------------------------------------------------------------------
 -- Demand analysis
 withNewDemand :: DynFlags -> Bool
-withNewDemand dflags = xopt Opt_NewDemandAnalyser dflags &&
-                       xopt Opt_NewWorkerWrapper  dflags
+withNewDemand dflags = xopt Opt_NewDemandAnalyser dflags
 
