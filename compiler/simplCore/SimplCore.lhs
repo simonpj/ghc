@@ -125,6 +125,7 @@ getCoreToDo dflags
     rule_check    = ruleCheck          dflags
     strictness    = dopt Opt_Strictness                   dflags 
     new_demand    = xopt Opt_NewDemandAnalyser            dflags
+    compare_flag  = xopt Opt_DemandCompare                dflags
     full_laziness = dopt Opt_FullLaziness                 dflags
     do_specialise = dopt Opt_Specialise                   dflags
     do_float_in   = dopt Opt_FloatIn                      dflags
@@ -200,15 +201,18 @@ getCoreToDo dflags
                     ])
     
     -- plug in new demand analyser
-    new_demand_phases = (CoreDoPasses [
-                           -- CoreDoStrictness,
-                           CoreDoNewStrictness,
-                           -- CoreDoCompareBetter,
-                           -- CoreDoCompareWorse,
-                           -- CoreDoCompareDiff,
-                           CoreDoWorkerWrapper,
+    compare_phases = if compare_flag 
+                     then [CoreDoStrictness,
+                           CoreDoCompareBetter,
+                           CoreDoCompareWorse,
+                           CoreDoCompareDiff]
+                     else []
+   
+    new_demand_phases = (CoreDoPasses ([CoreDoNewStrictness]
+                           ++ compare_phases ++
+                           [CoreDoWorkerWrapper,
                            simpl_phase 0 ["post-worker-wrapper"] max_iter
-                        ])
+                           ]))
 
     core_todo =
      if opt_level == 0 then

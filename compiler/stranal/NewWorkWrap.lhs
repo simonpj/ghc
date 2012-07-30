@@ -463,9 +463,9 @@ worthSplittingFun ds res
 	-- and hence do_strict_ww is False if arity is zero and there is no CPR
   -- See Note [Worker-wrapper for bottoming functions]
   where
-    worth_it d | isAbs d                = True	    -- Absent arg
     worth_it (JD {strd=SProd _, absd=a})  = isUsed a  -- Product arg to evaluate
-    worth_it _    	                = False
+    worth_it (JD {absd=Abs})              = True      -- Absent arg
+    worth_it _    	                  = False
 
 worthSplittingThunk :: Demand	        -- Demand on the thunk
 		    -> DmdResult	-- CPR info for the thunk
