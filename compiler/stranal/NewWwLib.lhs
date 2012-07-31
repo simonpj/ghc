@@ -402,7 +402,7 @@ mkWWstr_one dflags arg
 
 	-- `seq` demand; evaluate in wrapper in the hope
 	-- of dropping seqs in the worker
-      JD {strd=Str, absd=a} | isUsed a
+      JD {strd=Str, absd=UHead}
 	-> let
 		arg_w_unf = arg `setIdUnfolding` evaldUnfolding
 		-- Tell the worker arg that it's sure to be evaluated
@@ -463,7 +463,7 @@ mkWWcpr :: Type                              -- function body type
                    CoreExpr -> CoreExpr,	     -- New worker
 		   Type)			-- Type of worker's body 
 
-mkWWcpr body_ty (DR _ RetCPR)
+mkWWcpr body_ty (DR {res=TopRes,cpr=RetCPR})
     | not (isClosedAlgType body_ty)
     = WARN( True, 
             text "mkWWcpr: non-algebraic or open body type" <+> ppr body_ty )

@@ -464,6 +464,7 @@ worthSplittingFun ds res
   -- See Note [Worker-wrapper for bottoming functions]
   where
     worth_it (JD {strd=SProd _, absd=a})  = isUsed a  -- Product arg to evaluate
+    worth_it (JD {strd=HyperStr, absd=a}) = isUsed a  -- hyper-strict argument, safe to do W/W
     worth_it (JD {absd=Abs})              = True      -- Absent arg
     worth_it _    	                  = False
 
