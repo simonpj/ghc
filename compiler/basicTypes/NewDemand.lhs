@@ -397,7 +397,7 @@ isStrictDmd (JD {strd = x}) = x /= top
 
 isProdUsage :: Demand -> Bool
 isProdUsage (JD {absd = (UProd _)}) = True
--- isProdUsage (JD {absd = Used})      = True
+isProdUsage (JD {absd = Used})      = True
 isProdUsage _                       = False
 
 isUsedDmd :: Demand -> Bool
@@ -492,9 +492,9 @@ replicateDmd n (JD {strd=x, absd=y}) = zipWith mkJointDmd (replicateStrDmd n x)
 
 -- Check whether is a product demand
 isProdDmd :: Demand -> Bool
---isProdDmd (JD Str a) | isUsed a  = True
 isProdDmd (JD {strd = SProd _})     = True
-isProdDmd _                        = False
+isProdDmd (JD {absd = UProd _})     = True
+isProdDmd _                         = False
 
 isPolyDmd :: Demand -> Bool
 isPolyDmd (JD {strd=a, absd=b}) = isPolyStrDmd a && isPolyAbsDmd b

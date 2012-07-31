@@ -341,6 +341,25 @@ mkWWstr dflags (arg : args) = do
     (args2, wrap_fn2, work_fn2) <- mkWWstr dflags args
     return (args1 ++ args2, wrap_fn1 . wrap_fn2, work_fn1 . work_fn2)
 
+\end{code}
+
+Note [Unpacking arguments with product and polymorphic demands]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The argument is unpacked in a case if it has a product type and has a
+strict and used demand put on it. I.e., arguments, with demands such
+as the following ones:
+
+<S,U(U, L)>
+<S(L,S),U>
+
+will be unpacked. Moreover, for argumentsm whose demand is <S,U> or
+<S,H>, we take an advantage of the polymorphic nature of S and U and
+replicate the enclosed demand correspondingly (see definition of
+replicateDmd).
+
+
+\begin{code}
 ----------------------
 -- mkWWstr_one wrap_arg = (work_args, wrap_fn, work_fn)
 --   *  wrap_fn assumes wrap_arg is in scope,
@@ -361,11 +380,15 @@ mkWWstr_one dflags arg
       JD {absd=Abs} | Just work_fn <- mk_absent_let dflags arg
           -> return ([], nop_fn, work_fn)
 
-	-- Unpack case
-      d | isProdDmd d && isUsedDmd d 
+	-- Unpack case, 
+        -- see note [Unpacking arguments with product and polymorphic demands]
+      d | isStrictDmd d && isUsedDmd d
+        , isProdDmd d || isPolyDmd d
 	, Just (_arg_tycon, _tycon_arg_tys, data_con, inst_con_arg_tys) 
-		<- deepSplitProductType_maybe (idType arg)
-        , cs <- splitProdDmd d
+             <- deepSplitProductType_maybe (idType arg)
+        , cs <- if isProdDmd d then splitProdDmd d
+                  --  otherwise is polymorphic demand   
+                else replicateDmd (length inst_con_arg_tys) d 
 	-> do uniqs <- getUniquesM
 	      let
 	        unpk_args      = zipWith mk_ww_local uniqs inst_con_arg_tys
@@ -379,7 +402,7 @@ mkWWstr_one dflags arg
 
 	-- `seq` demand; evaluate in wrapper in the hope
 	-- of dropping seqs in the worker
-      JD {strd=Str, absd=UHead}
+      JD {strd=Str, absd=a} | isUsed a
 	-> let
 		arg_w_unf = arg `setIdUnfolding` evaldUnfolding
 		-- Tell the worker arg that it's sure to be evaluated
