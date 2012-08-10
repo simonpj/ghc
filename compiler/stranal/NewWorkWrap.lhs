@@ -463,10 +463,11 @@ worthSplittingFun ds res
 	-- and hence do_strict_ww is False if arity is zero and there is no CPR
   -- See Note [Worker-wrapper for bottoming functions]
   where
-    worth_it (JD {strd=SProd _, absd=a})  = isUsed a  -- Product arg to evaluate
-    worth_it (JD {strd=HyperStr, absd=a}) = isUsed a  -- hyper-strict argument, safe to do W/W
-    worth_it (JD {absd=Abs})              = True      -- Absent arg
-    worth_it _    	                  = False
+    worth_it (JD {strd=HyperStr, absd=a})     = isUsed a  -- A Hyper-strict argument, safe to do W/W
+    worth_it (JD {strd=SProd _, absd=a})      = isUsed a  -- Product arg to evaluate
+    worth_it (JD {strd=Str, absd=UProd _})    = True      -- Strictly used product arg
+    worth_it (JD {absd=Abs})                  = True      -- Absent arg
+    worth_it _    	                      = False
 
 worthSplittingThunk :: Demand	        -- Demand on the thunk
 		    -> DmdResult	-- CPR info for the thunk

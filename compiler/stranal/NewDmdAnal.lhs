@@ -184,6 +184,7 @@ dmdAnal env dmd (Lam var body)
     (deferType lam_ty, Lam var' body')
 
 dmdAnal env dmd (Case scrut case_bndr ty [alt@(DataAlt dc, _, _)])
+  -- Only one alternative with a product constructor
   | let tycon = dataConTyCon dc
   , isProductTyCon tycon
   , not (isRecursiveTyCon tycon)

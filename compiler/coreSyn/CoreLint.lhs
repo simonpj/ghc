@@ -22,7 +22,7 @@ module CoreLint ( lintCoreBindings, lintUnfolding ) where
 
 #include "HsVersions.h"
 
-import Demand
+import NewDemand
 import CoreSyn
 import CoreFVs
 import CoreUtils
@@ -205,16 +205,15 @@ lintSingleBinding top_lvl_flag rec_flag (binder,rhs)
 
       -- Check whether arity and demand type are consistent (only if demand analysis
       -- already happened)
-       ; checkL (case maybeDmdTy of
-                  Just (StrictSig dmd_ty) -> idArity binder >= dmdTypeDepth dmd_ty || exprIsTrivial rhs
-                  Nothing -> True)
+       ; checkL (case dmdTy of
+                  StrictSig dmd_ty -> idArity binder >= dmdTypeDepth dmd_ty || exprIsTrivial rhs)
            (mkArityMsg binder) }
 	  
 	-- We should check the unfolding, if any, but this is tricky because
  	-- the unfolding is a SimplifiableCoreExpr. Give up for now.
    where
     binder_ty                  = idType binder
-    maybeDmdTy                 = idStrictness_maybe binder
+    dmdTy                      = nd_idStrictness binder
     bndr_vars                  = varSetElems (idFreeVars binder)
     lintBinder var | isId var  = lintIdBndr var $ \_ -> (return ())
 	           | otherwise = return ()
@@ -1246,7 +1245,7 @@ mkArityMsg binder
 	      hsep [ptext (sLit "Binder's strictness signature:"), ppr dmd_ty]
 
          ]
-           where (StrictSig dmd_ty) = idStrictness binder
+           where (StrictSig dmd_ty) = nd_idStrictness binder
 
 mkCastErr :: CoreExpr -> Coercion -> Type -> Type -> MsgDoc
 mkCastErr expr co from_ty expr_ty

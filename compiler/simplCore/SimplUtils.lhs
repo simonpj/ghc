@@ -52,7 +52,8 @@ import CoreUnfold
 import Name
 import Id
 import Var
-import Demand
+--import Demand
+import NewDemand
 import SimplMonad
 import Type	hiding( substTy )
 import Coercion hiding( substCo, substTy )
@@ -400,7 +401,7 @@ mkArgInfo fun rules n_val_args call_cont
     vanilla_stricts  = repeat False
 
     arg_stricts
-      = case splitStrictSig (idStrictness fun) of
+      = case splitStrictSig (nd_idStrictness fun) of
 	  (demands, result_info)
 		| not (demands `lengthExceeds` n_val_args)
 		-> 	-- Enough args, use the strictness given.
@@ -1157,7 +1158,7 @@ tryEtaExpand env bndr rhs
 
     manifest_arity = manifestArity rhs
     old_arity  = idArity bndr
-    _dmd_arity = length $ fst $ splitStrictSig $ idStrictness bndr
+    _dmd_arity = length $ fst $ splitStrictSig $ nd_idStrictness bndr
 
 findArity :: DynFlags -> Id -> CoreExpr -> Arity -> Arity
 -- This implements the fixpoint loop for arity analysis
