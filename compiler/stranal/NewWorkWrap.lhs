@@ -461,9 +461,10 @@ worthSplittingFun ds res
   = any worth_it ds || returnsCPR res
 	-- worthSplitting returns False for an empty list of demands,
 	-- and hence do_strict_ww is False if arity is zero and there is no CPR
-  -- See Note [Worker-wrapper for bottoming functions]
   where
+    -- See Note [Worker-wrapper for bottoming functions]
     worth_it (JD {strd=HyperStr, absd=a})     = isUsed a  -- A Hyper-strict argument, safe to do W/W
+    -- See not [Worthy functions for Worker-Wrapper split]    
     worth_it (JD {strd=SProd _, absd=a})      = isUsed a  -- Product arg to evaluate
     worth_it (JD {strd=Str, absd=UProd _})    = True      -- Strictly used product arg
     worth_it (JD {absd=Abs})                  = True      -- Absent arg
@@ -480,6 +481,55 @@ worthSplittingThunk dmd res
         -- second component points out that at least some of     
     worth_it _           	       = False
 \end{code}
+
+Note [Worthy functions for Worker-Wrapper split]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 
+
+For non-bottoming functions a worker-wrapper transformation takes into
+account several possibilities to decide if the function is worthy for
+splitting:
+
+1. The result is of product type and the function is strict in some
+(or even all) of its arguments. The check that the argument is used is
+more of sanity nature, since strictness implies usage. Example:
+
+f :: (Int, Int) -> Int
+f p = (case p of (a,b) -> a) + 1
+
+should be splitted to
+
+f :: (Int, Int) -> Int
+f p = case p of (a,b) -> $wf a
+
+$wf :: Int -> Int
+$wf a = a + 1
+
+2. Sometimes it also makes sense to perform a WW split if the
+strictness analysis cannot say for sure if the function is strict in
+components of its argument. Then we reason according to the inferred
+usage information: if the function uses its product argument's
+components, the WW split can be beneficial. Example:
+
+g :: Bool -> (Int, Int) -> Int
+g c p = case p of (a,b) -> 
+          if c then a else b
+
+The function g is strict in is argument p and lazy in its
+components. However, both components are used in the RHS. The idea is
+since some of the components (both in this case) are used in the
+right-hand side, the product must presumable be taken apart.
+
+Therefore, the WW transform splits the function g to
+
+g :: Bool -> (Int, Int) -> Int
+g c p = case p of (a,b) -> $wg c a b
+
+$wg :: Bool -> Int -> Int -> Int
+$wg c a b = if c then a else b
+
+3. If an argument is absent, it would be silly to pass it to a
+function, hence the worker with reduced arity is generated.
+
 
 Note [Worker-wrapper for bottoming functions]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
