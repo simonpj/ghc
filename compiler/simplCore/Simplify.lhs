@@ -33,7 +33,7 @@ import FamInstEnv       ( topNormaliseType )
 import DataCon          ( DataCon, dataConWorkId, dataConRepStrictness )
 import CoreMonad        ( Tick(..), SimplifierMode(..) )
 import CoreSyn
--- import Demand           ( isStrictDmd, StrictSig(..), dmdTypeDepth )
+import Demand           ( isStrictDmd, StrictSig(..), dmdTypeDepth )
 import qualified NewDemand as ND ( isStrictDmd, StrictSig(..), dmdTypeDepth )
 import PprCore          ( pprParendExpr, pprCoreExpr )
 import CoreUnfold 
@@ -670,7 +670,8 @@ completeBind env top_lvl old_bndr new_bndr new_rhs
 	        -- Use the substitution to make quite, quite sure that the
 	        -- substitution will happen, since we are going to discard the binding
 	else
-   do { let info1 = idInfo new_bndr `setArityInfo` new_arity
+   do { dflags <- getDynFlags;
+        let info1 = idInfo new_bndr `setArityInfo` new_arity
 	
               -- Unfolding info: Note [Setting the new unfolding]
 	    info2 = info1 `setUnfoldingInfo` new_unfolding
@@ -680,9 +681,14 @@ completeBind env top_lvl old_bndr new_bndr new_rhs
               -- We also have to nuke demand info if for some reason
               -- eta-expansion *reduces* the arity of the binding to less
               -- than that of the strictness sig. This can happen: see Note [Arity decrease].
-            info3 | isEvaldUnfolding new_unfolding
+            info3 | withNewDemand dflags && (isEvaldUnfolding new_unfolding
                     || (case nd_strictnessInfo info2 of
-                          ND.StrictSig dmd_ty -> new_arity < ND.dmdTypeDepth dmd_ty)
+                          ND.StrictSig dmd_ty -> new_arity < ND.dmdTypeDepth dmd_ty))
+                  = nd_zapDemandInfo info2 `orElse` info2
+                  | (not $ withNewDemand dflags) && isEvaldUnfolding new_unfolding
+                    || (case strictnessInfo info2 of
+                          Just (StrictSig dmd_ty) -> new_arity < dmdTypeDepth dmd_ty
+                          Nothing                 -> False)
                   = zapDemandInfo info2 `orElse` info2
                   | otherwise
                   = info2
@@ -1170,7 +1176,9 @@ rebuild env expr cont
       Stop {}                       -> return (env, expr)
       CoerceIt co cont              -> rebuild env (mkCast expr co) cont 
                                     -- NB: mkCast implements the (Coercion co |> g) optimisation
-      Select _ bndr alts se cont    -> rebuildCase (se `setFloats` env) expr bndr alts cont
+      Select _ bndr alts se cont    -> do {
+                                         flags <- getDynFlags
+                                       ; rebuildCase flags (se `setFloats` env) expr bndr alts cont }
       StrictArg info _ cont         -> rebuildCall env (info `addArgTo` expr) cont
       StrictBind b bs body se cont  -> do { env' <- simplNonRecX (se `setFloats` env) b expr
                                           ; simplLam env' bs body cont }
@@ -1415,7 +1423,7 @@ completeCall env var cont
             ; Nothing -> do               -- No inlining!
 
         { rule_base <- getSimplRules
-        ; let info = mkArgInfo var (getRules rule_base var) n_val_args call_cont
+        ; let info = mkArgInfo dflags var (getRules rule_base var) n_val_args call_cont
         ; rebuildCall env info cont
     }}}
   where
@@ -1735,7 +1743,8 @@ I don't really know how to improve this situation.
 --      Eliminate the case if possible
 
 rebuildCase, reallyRebuildCase
-   :: SimplEnv
+   :: DynFlags 
+   -> SimplEnv
    -> OutExpr          -- Scrutinee
    -> InId             -- Case binder
    -> [InAlt]          -- Alternatives (inceasing order)
@@ -1746,7 +1755,7 @@ rebuildCase, reallyRebuildCase
 --      1. Eliminate the case if there's a known constructor
 --------------------------------------------------
 
-rebuildCase env scrut case_bndr alts cont
+rebuildCase _flags env scrut case_bndr alts cont
   | Lit lit <- scrut    -- No need for same treatment as constructors
                         -- because literals are inlined more vigorously
   , not (litIsLifted lit)
@@ -1775,7 +1784,7 @@ rebuildCase env scrut case_bndr alts cont
 --      2. Eliminate the case if scrutinee is evaluated
 --------------------------------------------------
 
-rebuildCase env scrut case_bndr [(_, bndrs, rhs)] cont
+rebuildCase flags env scrut case_bndr [(_, bndrs, rhs)] cont
   -- See if we can get rid of the case altogether
   -- See Note [Case elimination] 
   -- mkCase made sure that if all the alternatives are equal,
@@ -1814,7 +1823,9 @@ rebuildCase env scrut case_bndr [(_, bndrs, rhs)] cont
 
     ok_for_spec      = exprOkForSpeculation scrut
     is_plain_seq     = isDeadBinder case_bndr	-- Evaluation *only* for effect
-    strict_case_bndr = ND.isStrictDmd (nd_idDemandInfo case_bndr)
+    strict_case_bndr = if withNewDemand flags
+                       then ND.isStrictDmd (nd_idDemandInfo case_bndr)
+                       else isStrictDmd (idDemandInfo case_bndr)
 
     scrut_is_var (Cast s _) = scrut_is_var s
     scrut_is_var (Var _)    = True
@@ -1825,7 +1836,7 @@ rebuildCase env scrut case_bndr [(_, bndrs, rhs)] cont
 --      3. Try seq rules; see Note [User-defined RULES for seq] in MkId
 --------------------------------------------------
 
-rebuildCase env scrut case_bndr alts@[(_, bndrs, rhs)] cont
+rebuildCase _flags env scrut case_bndr alts@[(_, bndrs, rhs)] cont
   | all isDeadBinder (case_bndr : bndrs)  -- So this is just 'seq'
   = do { let rhs' = substExpr (text "rebuild-case") env rhs
              out_args = [Type (substTy env (idType case_bndr)), 
@@ -1838,16 +1849,16 @@ rebuildCase env scrut case_bndr alts@[(_, bndrs, rhs)] cont
            Just (n_args, res) -> simplExprF (zapSubstEnv env) 
 	   	       		    	    (mkApps res (drop n_args out_args))
                                             cont
-	   Nothing -> reallyRebuildCase env scrut case_bndr alts cont }
+	   Nothing -> reallyRebuildCase _flags env scrut case_bndr alts cont }
 
-rebuildCase env scrut case_bndr alts cont
-  = reallyRebuildCase env scrut case_bndr alts cont
+rebuildCase _flags env scrut case_bndr alts cont
+  = reallyRebuildCase _flags env scrut case_bndr alts cont
 
 --------------------------------------------------
 --      3. Catch-all case
 --------------------------------------------------
 
-reallyRebuildCase env scrut case_bndr alts cont
+reallyRebuildCase _flags env scrut case_bndr alts cont
   = do  {       -- Prepare the continuation;
                 -- The new subst_env is in place
           (env', dup_cont, nodup_cont) <- prepareCaseCont env alts cont
