@@ -1215,7 +1215,7 @@ mkStrictMsg :: Id -> MsgDoc
 mkStrictMsg binder
   = vcat [hsep [ptext (sLit "Recursive or top-level binder has strict demand info:"),
 		     ppr binder],
-	      hsep [ptext (sLit "Binder's demand info:"), ppr (idDemandInfo binder)]
+	      hsep [ptext (sLit "Binder's demand info:"), ppr (nd_idDemandInfo binder)]
 	     ]
 
 mkNonTopExportedMsg :: Id -> MsgDoc
