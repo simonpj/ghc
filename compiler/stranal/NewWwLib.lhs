@@ -379,7 +379,7 @@ mkWWstr_one dflags arg
 	-- (that's what mk_absent_let does)
       JD {absd=Abs} | Just work_fn <- mk_absent_let dflags arg
           -> return ([], nop_fn, work_fn)
-
+      
 	-- `seq` demand; evaluate in wrapper in the hope
 	-- of dropping seqs in the worker
       JD {strd=Str, absd=UHead}
@@ -402,9 +402,12 @@ mkWWstr_one dflags arg
 		-- But the Evald flag is pretty weird, and I worry that it might disappear
 		-- during simplification, so for now I've just nuked this whole case
 
+      -- TODO: explain!!          
+      JD {strd=SProd _, absd=Used} -> return ([arg], nop_fn, nop_fn)
+
 	-- Unpack case, 
         -- see note [Unpacking arguments with product and polymorphic demands]
-      d | isStrictDmd d && isUsedDmd d
+      d | isStrictDmd d
         , isProdDmd d || isPolyDmd d
 	, Just (_arg_tycon, _tycon_arg_tys, data_con, inst_con_arg_tys) 
              <- deepSplitProductType_maybe (idType arg)
