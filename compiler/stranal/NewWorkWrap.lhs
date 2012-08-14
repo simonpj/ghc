@@ -468,6 +468,7 @@ worthSplittingFun ds res
     worth_it (JD {absd=Abs})                  = True      -- Absent arg
     worth_it (JD {strd=SProd _})              = True      -- Product arg to evaluate
     worth_it (JD {strd=Str, absd=UProd _})    = True      -- Strictly used product arg
+    worth_it (JD {strd=Str, absd=UHead})      = True 
     worth_it _    	                      = False
 
 worthSplittingThunk :: Demand	        -- Demand on the thunk
