@@ -402,9 +402,6 @@ mkWWstr_one dflags arg
 		-- But the Evald flag is pretty weird, and I worry that it might disappear
 		-- during simplification, so for now I've just nuked this whole case
 
-      -- TODO: explain!!          
-      JD {strd=SProd _, absd=Used} -> return ([arg], nop_fn, nop_fn)
-
 	-- Unpack case, 
         -- see note [Unpacking arguments with product and polymorphic demands]
       d | isStrictDmd d
