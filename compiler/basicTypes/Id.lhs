@@ -698,7 +698,7 @@ zapLamIdInfo :: Id -> Id
 zapLamIdInfo = zapInfo zapLamInfo
 
 zapDemandIdInfo :: Id -> Id
-zapDemandIdInfo = zapInfo zapDemandInfo
+zapDemandIdInfo = zapInfo nd_zapDemandInfo
 
 zapFragileIdInfo :: Id -> Id
 zapFragileIdInfo = zapInfo zapFragileInfo 

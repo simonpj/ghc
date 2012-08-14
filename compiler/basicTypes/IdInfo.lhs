@@ -556,11 +556,11 @@ instance Outputable LBVarInfo where
 --
 -- > (\x1. \x2. e) arg1
 zapLamInfo :: IdInfo -> Maybe IdInfo
-zapLamInfo info@(IdInfo {occInfo = occ, demandInfo = demand})
-  | is_safe_occ occ && is_safe_dmd demand
+zapLamInfo info@(IdInfo {occInfo = occ, demandInfo = demand, nd_demandInfo = ndemand})
+  | is_safe_occ occ && is_safe_dmd demand && nd_is_safe_dmd ndemand
   = Nothing
   | otherwise
-  = Just (info {occInfo = safe_occ, demandInfo = Nothing})
+  = Just (info {occInfo = safe_occ, demandInfo = Nothing, nd_demandInfo = ND.top})
   where
 	-- The "unsafe" occ info is the ones that say I'm not in a lambda
 	-- because that might not be true for an unsaturated lambda
@@ -573,6 +573,8 @@ zapLamInfo info@(IdInfo {occInfo = occ, demandInfo = demand})
 
     is_safe_dmd Nothing    = True
     is_safe_dmd (Just dmd) = not (isStrictDmd dmd)
+
+    nd_is_safe_dmd ndmd = not (ND.isStrictDmd ndmd)
 \end{code}
 
 \begin{code}
@@ -583,9 +585,7 @@ zapDemandInfo info@(IdInfo {demandInfo = dmd})
   | otherwise  = Nothing
 
 nd_zapDemandInfo :: IdInfo -> Maybe IdInfo
-nd_zapDemandInfo info@(IdInfo {nd_demandInfo = dmd})
-  | ND.isTop dmd = Just (info {nd_demandInfo = ND.top})
-  | otherwise    = Nothing
+nd_zapDemandInfo info = Just (info {nd_demandInfo = ND.top})
 \end{code}
 
 \begin{code}

@@ -1119,7 +1119,9 @@ cloneVar :: LevelEnv -> Var -> Level -> LvlM (LevelEnv, Var)
 cloneVar env v dest_lvl -- Works for Ids, TyVars and CoVars
   = do { u <- getUniqueM
        ; let (subst', v1) = cloneBndr (le_subst env) u v
-      	     v2     	  = if isId v1 then zapDemandIdInfo v1 else v1
+      	     v2     	  = if isId v1 
+                            then (nd_zapDemandIdInfo . zapDemandIdInfo) v1  
+                            else v1
       	     env'	  = extendCloneLvlEnv dest_lvl env subst' [(v,v2)]
        ; return (env', v2) }
 
@@ -1132,7 +1134,8 @@ cloneRecVars env vs dest_lvl -- Works for CoVars too (since cloneRecIdBndrs does
     us <- getUniqueSupplyM
     let
       (subst', vs1) = cloneRecIdBndrs (le_subst env) us vs
-      vs2	    = map zapDemandIdInfo vs1  -- Note [Zapping the demand info]
+      -- Note [Zapping the demand info]
+      vs2	    = map (nd_zapDemandIdInfo . zapDemandIdInfo) vs1  
       env'	    = extendCloneLvlEnv dest_lvl env subst' (vs `zip` vs2)
     return (env', vs2)
 \end{code}

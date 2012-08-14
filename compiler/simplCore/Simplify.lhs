@@ -462,6 +462,7 @@ prepareRhs top_lvl env id (Cast rhs co)    -- Note [Float coercions]
     sanitised_info = vanillaIdInfo `setStrictnessInfo` strictnessInfo info
                                    `nd_setStrictnessInfo` nd_strictnessInfo info
                                    `setDemandInfo`     demandInfo info
+                                   `nd_setDemandInfo` nd_demandInfo info
     info = idInfo id
 
 prepareRhs top_lvl env0 _ rhs0
