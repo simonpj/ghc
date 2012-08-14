@@ -380,26 +380,6 @@ mkWWstr_one dflags arg
       JD {absd=Abs} | Just work_fn <- mk_absent_let dflags arg
           -> return ([], nop_fn, work_fn)
 
-	-- Unpack case, 
-        -- see note [Unpacking arguments with product and polymorphic demands]
-      d | isStrictDmd d && isUsedDmd d
-        , isProdDmd d || isPolyDmd d
-	, Just (_arg_tycon, _tycon_arg_tys, data_con, inst_con_arg_tys) 
-             <- deepSplitProductType_maybe (idType arg)
-        , cs <- if isProdDmd d then splitProdDmd d
-                  --  otherwise is polymorphic demand   
-                else replicateDmd (length inst_con_arg_tys) d 
-	-> do uniqs <- getUniquesM
-	      let
-	        unpk_args      = zipWith mk_ww_local uniqs inst_con_arg_tys
-	        unpk_args_w_ds = zipWithEqual "mkWWstr" set_worker_arg_info unpk_args cs
-	        unbox_fn       = mkUnpackCase (sanitiseCaseBndr arg) (Var arg) unpk_args data_con
-	        rebox_fn       = Let (NonRec arg con_app) 
-	        con_app        = mkProductBox unpk_args (idType arg)
-	      (worker_args, wrap_fn, work_fn) <- mkWWstr dflags unpk_args_w_ds
-	      return (worker_args, unbox_fn . wrap_fn, work_fn . rebox_fn) 
-	  		   -- Don't pass the arg, rebox instead
-
 	-- `seq` demand; evaluate in wrapper in the hope
 	-- of dropping seqs in the worker
       JD {strd=Str, absd=UHead}
@@ -421,6 +401,26 @@ mkWWstr_one dflags arg
 		-- we end up evaluating the absent thunk.
 		-- But the Evald flag is pretty weird, and I worry that it might disappear
 		-- during simplification, so for now I've just nuked this whole case
+
+	-- Unpack case, 
+        -- see note [Unpacking arguments with product and polymorphic demands]
+      d | isStrictDmd d && isUsedDmd d
+        , isProdDmd d || isPolyDmd d
+	, Just (_arg_tycon, _tycon_arg_tys, data_con, inst_con_arg_tys) 
+             <- deepSplitProductType_maybe (idType arg)
+        , cs <- if isProdDmd d then splitProdDmd d
+                  --  otherwise is polymorphic demand   
+                else replicateDmd (length inst_con_arg_tys) d 
+	-> do uniqs <- getUniquesM
+	      let
+	        unpk_args      = zipWith mk_ww_local uniqs inst_con_arg_tys
+	        unpk_args_w_ds = zipWithEqual "mkWWstr" set_worker_arg_info unpk_args cs
+	        unbox_fn       = mkUnpackCase (sanitiseCaseBndr arg) (Var arg) unpk_args data_con
+	        rebox_fn       = Let (NonRec arg con_app) 
+	        con_app        = mkProductBox unpk_args (idType arg)
+	      (worker_args, wrap_fn, work_fn) <- mkWWstr dflags unpk_args_w_ds
+	      return (worker_args, unbox_fn . wrap_fn, work_fn . rebox_fn) 
+	  		   -- Don't pass the arg, rebox instead
 			
 	-- Other cases
       _other_demand -> return ([arg], nop_fn, nop_fn)

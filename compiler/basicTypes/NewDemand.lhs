@@ -493,9 +493,10 @@ replicateDmd n (JD {strd=x, absd=y}) = zipWith mkJointDmd (replicateStrDmd n x)
 
 -- Check whether is a product demand
 isProdDmd :: Demand -> Bool
-isProdDmd (JD {strd = SProd _})     = True
-isProdDmd (JD {absd = UProd _})     = True
-isProdDmd _                         = False
+isProdDmd (JD {strd = SProd _, absd = UProd _}) = True
+isProdDmd (JD {strd = SProd _, absd = a})        = isPolyAbsDmd a
+isProdDmd (JD {strd = s, absd = UProd _})        = isPolyStrDmd s
+isProdDmd _                                      = False
 
 isPolyDmd :: Demand -> Bool
 isPolyDmd (JD {strd=a, absd=b}) = isPolyStrDmd a && isPolyAbsDmd b

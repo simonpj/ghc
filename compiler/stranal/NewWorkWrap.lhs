@@ -465,9 +465,9 @@ worthSplittingFun ds res
     -- See Note [Worker-wrapper for bottoming functions]
     worth_it (JD {strd=HyperStr, absd=a})     = isUsed a  -- A Hyper-strict argument, safe to do W/W
     -- See not [Worthy functions for Worker-Wrapper split]    
-    worth_it (JD {strd=SProd _, absd=a})      = isUsed a  -- Product arg to evaluate
-    worth_it (JD {strd=Str, absd=UProd _})    = True      -- Strictly used product arg
     worth_it (JD {absd=Abs})                  = True      -- Absent arg
+    worth_it (JD {strd=SProd _})              = True      -- Product arg to evaluate
+    worth_it (JD {strd=Str, absd=UProd _})    = True      -- Strictly used product arg
     worth_it _    	                      = False
 
 worthSplittingThunk :: Demand	        -- Demand on the thunk
@@ -477,9 +477,10 @@ worthSplittingThunk dmd res
   = worth_it dmd || returnsCPR res
   where
 	-- Split if the thing is unpacked
-    worth_it (JD {strd=SProd _, absd=a}) = someCompUsed a   
+    worth_it (JD {strd=SProd _, absd=a})   = someCompUsed a
+    worth_it (JD {strd=Str, absd=UProd _}) = True   
         -- second component points out that at least some of     
-    worth_it _           	       = False
+    worth_it _           	           = False
 \end{code}
 
 Note [Worthy functions for Worker-Wrapper split]

@@ -520,8 +520,10 @@ nd_zapIdStrictness id = modifyIdInfo (`nd_setStrictnessInfo` ND.topSig) id
 isStrictId :: Id -> Bool
 isStrictId id
   = ASSERT2( isId id, text "isStrictId: not an id: " <+> ppr id )
-           (isStrictDmd (idDemandInfo id)) || 
-           (isStrictType (idType id))
+           ((isStrictDmd (idDemandInfo id)) || 
+            (isStrictType (idType id))) ||
+           -- Take the best of both strictnesses - old and new               
+           (ND.isStrictDmd (nd_idDemandInfo id))
 
 	---------------------------------
 	-- UNFOLDING

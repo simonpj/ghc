@@ -681,11 +681,13 @@ completeBind env top_lvl old_bndr new_bndr new_rhs
               -- We also have to nuke demand info if for some reason
               -- eta-expansion *reduces* the arity of the binding to less
               -- than that of the strictness sig. This can happen: see Note [Arity decrease].
-            info3 | withNewDemand dflags && (isEvaldUnfolding new_unfolding
+            info3 | withNewDemand dflags
+                  , isEvaldUnfolding new_unfolding
                     || (case nd_strictnessInfo info2 of
-                          ND.StrictSig dmd_ty -> new_arity < ND.dmdTypeDepth dmd_ty))
+                          ND.StrictSig dmd_ty -> new_arity < ND.dmdTypeDepth dmd_ty)
                   = nd_zapDemandInfo info2 `orElse` info2
-                  | (not $ withNewDemand dflags) && isEvaldUnfolding new_unfolding
+                  | not $ withNewDemand dflags
+                  , isEvaldUnfolding new_unfolding
                     || (case strictnessInfo info2 of
                           Just (StrictSig dmd_ty) -> new_arity < dmdTypeDepth dmd_ty
                           Nothing                 -> False)
