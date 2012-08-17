@@ -31,7 +31,6 @@ import CoreSyn
 import CoreUtils
 import CoreUnfold
 import CoreLint
-import WorkWrap                     ( mkWrapper )
 import qualified NewWorkWrap as NWW ( mkWrapper )
 import MkCore                       ( castBottomExpr )
 import Id
@@ -52,7 +51,6 @@ import Name
 import NameEnv
 import NameSet
 import OccurAnal        ( occurAnalyseExpr )
-import Demand           ( isBottomingSig )
 import qualified NewDemand as ND ( isBottomingSig )
 import Module
 import UniqFM
@@ -1201,22 +1199,16 @@ tcIdInfo ignore_prags name ty info
 tcUnfolding :: Name -> Type -> IdInfo -> IfaceUnfolding -> IfL Unfolding
 tcUnfolding name _ info (IfCoreUnfold stable if_expr)
   = do  { mb_expr <- tcPragExpr name if_expr
-        ; dflags <- getDynFlags
         ; let unf_src = if stable then InlineStable else InlineRhs
         ; return (case mb_expr of
                     Nothing   -> NoUnfolding
                     Just expr -> mkUnfolding unf_src
                                              True {- Top level -} 
-                                             (is_bottoming dflags)
+                                             is_bottoming
                                              expr) }
   where
      -- Strictness should occur before unfolding!
-    is_bottoming dflags
-       = if withNewDemand dflags 
-         then case strictnessInfo info of
-                Just sig -> isBottomingSig sig
-                Nothing  -> False
-         else ND.isBottomingSig $ nd_strictnessInfo info       
+    is_bottoming = ND.isBottomingSig $ nd_strictnessInfo info              
 
 tcUnfolding name _ _ (IfCompulsory if_expr)
   = do  { mb_expr <- tcPragExpr name if_expr
@@ -1253,9 +1245,7 @@ tcIfaceWrapper name ty info arity get_worker
   = do  { mb_wkr_id <- forkM_maybe doc get_worker
         ; us <- newUniqueSupply
         ; dflags <- getDynFlags
-        ; let mk_wrapper = if withNewDemand dflags
-                           then \dfs t -> NWW.mkWrapper dfs t nd_strict_sig            
-                           else \dfs t -> mkWrapper dfs t strict_sig
+        ; let mk_wrapper = \dfs t -> NWW.mkWrapper dfs t nd_strict_sig
         ; return (case mb_wkr_id of
                      Nothing     -> noUnfolding
                      Just wkr_id -> make_inline_rule mk_wrapper dflags wkr_id us) }
@@ -1268,9 +1258,6 @@ tcIfaceWrapper name ty info arity get_worker
                          arity
         -- Again we rely here on strictness info always appearing 
         -- before unfolding
-    strict_sig = case strictnessInfo info of
-                   Just sig -> sig
-                   Nothing  -> pprPanic "Worker info but no strictness for" (ppr name)
     nd_strict_sig = nd_strictnessInfo info
 
 \end{code}

@@ -341,9 +341,7 @@ cpeBind :: DynFlags -> TopLevelFlag
         -> UniqSM (CorePrepEnv, Floats)
 cpeBind dflags top_lvl env (NonRec bndr rhs)
   = do { (_, bndr1) <- cpCloneBndr env bndr
-       ; let is_strict   = if withNewDemand dflags
-                           then ND.isStrictDmd (nd_idDemandInfo bndr)
-                           else isStrictDmd (idDemandInfo bndr)     
+       ; let is_strict   = ND.isStrictDmd (nd_idDemandInfo bndr)
              is_unlifted = isUnLiftedType (idType bndr)
        ; (floats, bndr2, rhs2) <- cpePair dflags top_lvl NonRecursive
                                           (is_strict || is_unlifted)
@@ -643,8 +641,7 @@ cpeApp dflags env expr
            ; let
               (ss1, ss_rest)   = case ss of
                                    (ss1:ss_rest)             -> (ss1,     ss_rest)
-                                   [] | withNewDemand dflags -> (Left ND.top, [])
-                                   []                        -> (Right topDmd, [])
+                                   []                        -> (Left ND.top, [])
               (arg_ty, res_ty) = expectJust "cpeBody:collect_args" $
                                  splitFunTy_maybe fun_ty
               is_strict = case ss1 of 
@@ -659,15 +656,9 @@ cpeApp dflags env expr
            ; let v2 = lookupCorePrepEnv env v1
            ; return (Var v2, (Var v2, depth), idType v2, emptyFloats, stricts) }
         where
-          stricts = if withNewDemand dflags
-                     then case nd_idStrictness v of
+          stricts = case nd_idStrictness v of
                             ND.StrictSig (ND.DmdType _ demands _)
                               | listLengthCmp demands depth /= GT -> map Left demands
-                                    -- length demands <= depth
-                              | otherwise                         -> []
-                     else case idStrictness v of
-                            StrictSig (DmdType _ demands _)
-                              | listLengthCmp demands depth /= GT -> map Right demands
                                     -- length demands <= depth
                               | otherwise                         -> []
                 -- If depth < length demands, then we have too few args to

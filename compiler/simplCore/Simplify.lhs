@@ -33,7 +33,6 @@ import FamInstEnv       ( topNormaliseType )
 import DataCon          ( DataCon, dataConWorkId, dataConRepStrictness )
 import CoreMonad        ( Tick(..), SimplifierMode(..) )
 import CoreSyn
-import Demand           ( isStrictDmd, StrictSig(..), dmdTypeDepth )
 import qualified NewDemand as ND ( isStrictDmd, StrictSig(..), dmdTypeDepth )
 import PprCore          ( pprParendExpr, pprCoreExpr )
 import CoreUnfold 
@@ -671,8 +670,7 @@ completeBind env top_lvl old_bndr new_bndr new_rhs
 	        -- Use the substitution to make quite, quite sure that the
 	        -- substitution will happen, since we are going to discard the binding
 	else
-   do { dflags <- getDynFlags;
-        let info1 = idInfo new_bndr `setArityInfo` new_arity
+   do { let info1 = idInfo new_bndr `setArityInfo` new_arity
 	
               -- Unfolding info: Note [Setting the new unfolding]
 	    info2 = info1 `setUnfoldingInfo` new_unfolding
@@ -682,17 +680,10 @@ completeBind env top_lvl old_bndr new_bndr new_rhs
               -- We also have to nuke demand info if for some reason
               -- eta-expansion *reduces* the arity of the binding to less
               -- than that of the strictness sig. This can happen: see Note [Arity decrease].
-            info3 | withNewDemand dflags
-                  , isEvaldUnfolding new_unfolding
+            info3 | isEvaldUnfolding new_unfolding
                     || (case nd_strictnessInfo info2 of
                           ND.StrictSig dmd_ty -> new_arity < ND.dmdTypeDepth dmd_ty)
                   = nd_zapDemandInfo info2 `orElse` info2
-                  | not $ withNewDemand dflags
-                  , isEvaldUnfolding new_unfolding
-                    || (case strictnessInfo info2 of
-                          Just (StrictSig dmd_ty) -> new_arity < dmdTypeDepth dmd_ty
-                          Nothing                 -> False)
-                  = zapDemandInfo info2 `orElse` info2
                   | otherwise
                   = info2
 
@@ -1787,7 +1778,7 @@ rebuildCase _flags env scrut case_bndr alts cont
 --      2. Eliminate the case if scrutinee is evaluated
 --------------------------------------------------
 
-rebuildCase flags env scrut case_bndr [(_, bndrs, rhs)] cont
+rebuildCase _flags env scrut case_bndr [(_, bndrs, rhs)] cont
   -- See if we can get rid of the case altogether
   -- See Note [Case elimination] 
   -- mkCase made sure that if all the alternatives are equal,
@@ -1826,9 +1817,7 @@ rebuildCase flags env scrut case_bndr [(_, bndrs, rhs)] cont
 
     ok_for_spec      = exprOkForSpeculation scrut
     is_plain_seq     = isDeadBinder case_bndr	-- Evaluation *only* for effect
-    strict_case_bndr = if withNewDemand flags
-                       then ND.isStrictDmd (nd_idDemandInfo case_bndr)
-                       else isStrictDmd (idDemandInfo case_bndr)
+    strict_case_bndr = ND.isStrictDmd (nd_idDemandInfo case_bndr)
 
     scrut_is_var (Cast s _) = scrut_is_var s
     scrut_is_var (Var _)    = True

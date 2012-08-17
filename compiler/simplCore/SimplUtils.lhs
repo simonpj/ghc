@@ -52,7 +52,6 @@ import CoreUnfold
 import Name
 import Id
 import Var
-import Demand
 import qualified NewDemand as ND
 import SimplMonad
 import Type	hiding( substTy )
@@ -376,7 +375,7 @@ mkArgInfo :: DynFlags
 	  -> SimplCont	-- Context of the call
 	  -> ArgInfo
 
-mkArgInfo flags fun rules n_val_args call_cont
+mkArgInfo _flags fun rules n_val_args call_cont
   | n_val_args < idArity fun		-- Note [Unsaturated functions]
   = ArgInfo { ai_fun = fun, ai_args = [], ai_type = fun_ty
             , ai_rules = rules, ai_encl = False
@@ -402,7 +401,6 @@ mkArgInfo flags fun rules n_val_args call_cont
     vanilla_stricts  = repeat False
 
     arg_stricts
-      | withNewDemand flags
       = case ND.splitStrictSig (nd_idStrictness fun) of
 	  (demands, result_info)
 		| not (demands `lengthExceeds` n_val_args)
@@ -417,25 +415,6 @@ mkArgInfo flags fun rules n_val_args call_cont
 			map ND.isStrictDmd demands		-- Finite => result is bottom
 		   else
 			map ND.isStrictDmd demands ++ vanilla_stricts
-	       | otherwise
-	       -> WARN( True, text "More demands than arity" <+> ppr fun <+> ppr (idArity fun) 
-				<+> ppr n_val_args <+> ppr demands ) 
-		   vanilla_stricts	-- Not enough args, or no strictness
-      | otherwise
-      = case splitStrictSig (idStrictness fun) of
-	  (demands, result_info)
-		| not (demands `lengthExceeds` n_val_args)
-		-> 	-- Enough args, use the strictness given.
-			-- For bottoming functions we used to pretend that the arg
-			-- is lazy, so that we don't treat the arg as an
-			-- interesting context.  This avoids substituting
-			-- top-level bindings for (say) strings into 
-			-- calls to error.  But now we are more careful about
-			-- inlining lone variables, so its ok (see SimplUtils.analyseCont)
-		   if isBotRes result_info then
-			map isStrictDmd demands		-- Finite => result is bottom
-		   else
-			map isStrictDmd demands ++ vanilla_stricts
 	       | otherwise
 	       -> WARN( True, text "More demands than arity" <+> ppr fun <+> ppr (idArity fun) 
 				<+> ppr n_val_args <+> ppr demands ) 
@@ -1158,9 +1137,9 @@ tryEtaExpand env bndr rhs
   = do { dflags <- getDynFlags
        ; (new_arity, new_rhs) <- try_expand dflags
 
-       ; WARN( new_arity < old_arity || new_arity < (_dmd_arity dflags), 
+       ; WARN( new_arity < old_arity || new_arity < _dmd_arity, 
                (ptext (sLit "Arity decrease:") <+> (ppr bndr <+> ppr old_arity
-		<+> ppr new_arity <+> ppr (_dmd_arity dflags)) $$ ppr new_rhs) )
+		<+> ppr new_arity <+> ppr _dmd_arity) $$ ppr new_rhs) )
 			-- Note [Arity decrease]
          return (new_arity, new_rhs) }
   where
@@ -1179,11 +1158,8 @@ tryEtaExpand env bndr rhs
 
     manifest_arity = manifestArity rhs
     old_arity  = idArity bndr
-    _dmd_arity flags 
-      | withNewDemand flags
+    _dmd_arity 
       = length $ fst $ ND.splitStrictSig $ nd_idStrictness bndr
-      | otherwise 
-      = length $ fst $ splitStrictSig $ idStrictness bndr
 
 findArity :: DynFlags -> Id -> CoreExpr -> Arity -> Arity
 -- This implements the fixpoint loop for arity analysis
