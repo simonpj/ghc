@@ -43,10 +43,8 @@ import LiberateCase     ( liberateCase )
 import SAT              ( doStaticArgs )
 import Specialise       ( specProgram)
 import SpecConstr       ( specConstrProgram)
-import DmdAnal          ( dmdAnalPgm )
 import NewDmdAnal       ( dmdAnalProgram )
 import StrCompare       ( comparePgm )
-import WorkWrap         ( wwTopBinds )
 import qualified NewWorkWrap as NWW        ( wwTopBinds )
 import Vectorise        ( vectorise )
 import FastString
@@ -124,8 +122,6 @@ getCoreToDo dflags
     max_iter      = maxSimplIterations dflags
     rule_check    = ruleCheck          dflags
     strictness    = dopt Opt_Strictness                   dflags 
-    new_demand    = xopt Opt_NewDemandAnalyser            dflags
-    compare_flag  = xopt Opt_DemandCompare                dflags
     full_laziness = dopt Opt_FullLaziness                 dflags
     do_specialise = dopt Opt_Specialise                   dflags
     do_float_in   = dopt Opt_FloatIn                      dflags
@@ -139,7 +135,7 @@ getCoreToDo dflags
     maybe_rule_check phase = runMaybe rule_check (CoreDoRuleCheck phase)
 
     maybe_strictness_before phase
-      = runWhen (phase `elem` strictnessBefore dflags) CoreDoStrictness
+      = runWhen (phase `elem` strictnessBefore dflags) CoreDoNewStrictness
 
     base_mode = SimplMode { sm_phase      = panic "base_mode"
                           , sm_names      = []
@@ -194,23 +190,11 @@ getCoreToDo dflags
                                   , sm_case_case = False })
                           -- Don't do case-of-case transformations.
                           -- This makes full laziness work better
-    demand_phases = (CoreDoPasses [
-                       CoreDoStrictness,
-                       CoreDoWorkerWrapper,
-                       simpl_phase 0 ["post-worker-wrapper"] max_iter
-                    ])
-    
+
     -- plug in new demand analyser
-    compare_phases = if compare_flag 
-                     then [CoreDoStrictness,
-                           CoreDoCompareBetter,
-                           CoreDoCompareWorse,
-                           CoreDoCompareDiff]
-                     else []
-   
-    new_demand_phases = (CoreDoPasses ([CoreDoNewStrictness]
-                           ++ compare_phases ++
-                           [CoreDoWorkerWrapper,
+    new_demand_phases = (CoreDoPasses ([
+                           CoreDoNewStrictness,
+                           CoreDoWorkerWrapper,
                            simpl_phase 0 ["post-worker-wrapper"] max_iter
                            ]))
 
@@ -280,8 +264,7 @@ getCoreToDo dflags
                 -- Don't stop now!
         simpl_phase 0 ["main"] (max max_iter 3),
 
-        runWhen strictness (if new_demand then new_demand_phases
-                            else demand_phases),
+        runWhen strictness new_demand_phases,
 
         runWhen full_laziness $
            CoreDoFloatOutwards FloatOutSwitches {
@@ -409,7 +392,7 @@ doCorePass _      CoreDoStaticArgs          = {-# SCC "StaticArgs" #-}
                                               doPassU doStaticArgs
 
 doCorePass _      CoreDoStrictness          = {-# SCC "Stranal" #-}
-                                              doPassDM dmdAnalPgm
+                                              return
 
 doCorePass _      CoreDoNewStrictness       = {-# SCC "NewStranal" #-}
                                               doPassDM dmdAnalProgram
@@ -424,9 +407,7 @@ doCorePass _      CoreDoCompareDiff         = {-# SCC "StrCompare" #-}
                                               doPassDM $ comparePgm Nothing
 
 doCorePass dflags CoreDoWorkerWrapper       = {-# SCC "WorkWrap" #-}
-                                              if withNewDemand dflags 
-                                              then doPassU (NWW.wwTopBinds dflags)
-                                              else doPassU (wwTopBinds dflags)
+                                              doPassU (NWW.wwTopBinds dflags)
 
 doCorePass dflags CoreDoSpecialising        = {-# SCC "Specialise" #-}
                                               specProgram dflags
@@ -941,8 +922,7 @@ transferIdInfo exported_id local_id
   = modifyIdInfo transfer exported_id
   where
     local_info = idInfo local_id
-    transfer exp_info = exp_info `setStrictnessInfo`    strictnessInfo local_info
-                                 `nd_setStrictnessInfo` nd_strictnessInfo local_info
+    transfer exp_info = exp_info `nd_setStrictnessInfo` nd_strictnessInfo local_info
                                  `setUnfoldingInfo`     unfoldingInfo local_info
                                  `setInlinePragInfo`    inlinePragInfo local_info
                                  `setSpecInfo`          addSpecInfo (specInfo exp_info) new_info
