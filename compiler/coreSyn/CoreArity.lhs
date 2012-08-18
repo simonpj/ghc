@@ -629,7 +629,7 @@ arityType env (Cast e co)
     -- However, do make sure that ATop -> ATop and ABot -> ABot!
     --   Casts don't affect that part. Getting this wrong provoked #5475
 
-arityType _ (Var v)
+arityType _ (Var v) --[potential bug here !!!]
   | Just strict_sig <- idStrictness_maybe v
   , (ds, res) <- splitStrictSig strict_sig
   , let arity = length ds

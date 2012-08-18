@@ -29,8 +29,7 @@ import Id
 import IdInfo
 import InstEnv
 import FamInstEnv
-import Demand
-import qualified NewDemand as ND ( appIsBottom, isTopSig )
+import qualified NewDemand as ND ( appIsBottom, isTopSig, isBottomingSig )
 import BasicTypes
 import Name hiding (varName)
 import NameSet
@@ -761,7 +760,7 @@ addExternal expose_all id = (new_needed_ids, show_unfold)
     show_unfold    = show_unfolding (unfoldingInfo idinfo)
     never_active   = isNeverActive (inlinePragmaActivation (inlinePragInfo idinfo))
     loop_breaker   = isStrongLoopBreaker (occInfo idinfo)
-    bottoming_fn   = isBottomingSig (strictnessInfo idinfo `orElse` topSig)
+    bottoming_fn   = ND.isBottomingSig (nd_strictnessInfo idinfo)
 
         -- Stuff to do with the Id's unfolding
         -- We leave the unfolding there even if there is a worker
@@ -1142,14 +1141,12 @@ tidyTopIdInfo rhs_tidy_env name orig_rhs tidy_rhs idinfo show_unfold caf_info
                         --      c.f. CoreTidy.tidyLetBndr
         `setCafInfo`        caf_info
         `setArityInfo`      arity
-        `setStrictnessInfo` final_sig
         `nd_setStrictnessInfo` nd_final_sig
 
   | otherwise           -- Externally-visible Ids get the whole lot
   = vanillaIdInfo
         `setCafInfo`           caf_info
         `setArityInfo`         arity
-        `setStrictnessInfo`    final_sig
         `nd_setStrictnessInfo` nd_final_sig
         `setOccInfo`           robust_occ_info
         `setInlinePragInfo`    (inlinePragInfo idinfo)
@@ -1165,20 +1162,8 @@ tidyTopIdInfo rhs_tidy_env name orig_rhs tidy_rhs idinfo show_unfold caf_info
     -- when we are doing -fexpose-all-unfoldings
 
     --------- Strictness ------------
-    final_sig | Just sig <- strictnessInfo idinfo
-              = WARN( _bottom_hidden sig, ppr name ) Just sig
-              | Just (_, sig, _) <- mb_bot_str = Just sig
-              | otherwise                   = Nothing
-
-    -- If the cheap-and-cheerful bottom analyser can see that
-    -- the RHS is bottom, it should jolly well be exposed
-    _bottom_hidden id_sig = case mb_bot_str of
-                               Nothing         -> False
-                               Just (arity, _, _) -> not (appIsBottom id_sig arity)
-
     mb_bot_str = exprBotStrictness_maybe orig_rhs
 
-    -- The same stuff for new demand signatures          
     nd_sig = nd_strictnessInfo idinfo
     nd_final_sig | not $ ND.isTopSig nd_sig 
                  = WARN( _nd_bottom_hidden nd_sig , ppr name ) nd_sig 
@@ -1195,9 +1180,7 @@ tidyTopIdInfo rhs_tidy_env name orig_rhs tidy_rhs idinfo show_unfold caf_info
     unfold_info | show_unfold = tidyUnfolding rhs_tidy_env unf_info unf_from_rhs
                 | otherwise   = noUnfolding
     unf_from_rhs = mkTopUnfolding is_bot tidy_rhs
-    is_bot = case final_sig of
-                Just sig -> isBottomingSig sig
-                Nothing  -> False
+    is_bot = ND.isBottomingSig nd_final_sig
     -- NB: do *not* expose the worker if show_unfold is off,
     --     because that means this thing is a loop breaker or
     --     marked NOINLINE or something like that

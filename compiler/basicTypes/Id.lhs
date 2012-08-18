@@ -488,7 +488,7 @@ idRepArity x = typeRepArity (idArity x) (idType x)
 
 -- | Returns true if an application to n args would diverge
 isBottomingId :: Id -> Bool
-isBottomingId id = isBottomingSig (idStrictness id)
+isBottomingId id = ND.isBottomingSig (nd_idStrictness id)
 
 idStrictness_maybe :: Id -> Maybe StrictSig
 idStrictness :: Id -> StrictSig
