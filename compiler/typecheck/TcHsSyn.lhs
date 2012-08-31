@@ -574,8 +574,9 @@ zonkExpr env (HsBracketOut body bs)
     zonk_b (n,e) = zonkLExpr env e	`thenM` \ e' ->
 		   returnM (n,e')
 
-zonkExpr _ (HsSpliceE s) = WARN( True, ppr s ) -- Should not happen
-			     returnM (HsSpliceE s)
+zonkExpr _ (HsSpliceU s) = WARN( True, ppr s ) returnM (HsSpliceU s)
+zonkExpr _ (HsSpliceT s) = WARN( True, ppr s ) returnM (HsSpliceT s)
+                           -- Should not happen
 
 zonkExpr env (OpApp e1 op fixity e2)
   = zonkLExpr env e1	`thenM` \ new_e1 ->

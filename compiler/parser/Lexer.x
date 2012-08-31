@@ -306,14 +306,15 @@ $tab+         { warn Opt_WarnTabs (text "Tab character") }
 }
 
 <0> {
-  "[|"      / { ifExtension thEnabled } { token ITopenExpQuote }
+  "[|"      / { ifExtension thEnabled } { token ITopenTExpQuote }
   "[e|"     / { ifExtension thEnabled } { token ITopenExpQuote }
   "[p|"     / { ifExtension thEnabled } { token ITopenPatQuote }
   "[d|"     / { ifExtension thEnabled } { layout_token ITopenDecQuote }
   "[t|"     / { ifExtension thEnabled } { token ITopenTypQuote }
   "|]"      / { ifExtension thEnabled } { token ITcloseQuote }
   \$ @varid / { ifExtension thEnabled } { skip_one_varid ITidEscape }
-  "$("      / { ifExtension thEnabled } { token ITparenEscape }
+  "$("      / { ifExtension thEnabled } { token (ITparenEscape True)  }
+  "$$("     / { ifExtension thEnabled } { token (ITparenEscape False) }
 
 -- For backward compatibility, accept the old dollar syntax
   "[$" @varid "|"  / { ifExtension qqEnabled }
@@ -559,13 +560,15 @@ data Token
   | ITprimdouble FractionalLit
 
   -- Template Haskell extension tokens
-  | ITopenExpQuote              --  [| or [e|
+  | ITopenTExpQuote             --  [|
+  | ITopenExpQuote              --  [e|
   | ITopenPatQuote              --  [p|
   | ITopenDecQuote              --  [d|
   | ITopenTypQuote              --  [t|
   | ITcloseQuote                --  |]
   | ITidEscape   FastString     --  $x
-  | ITparenEscape               --  $(
+  | ITparenEscape Bool          --      $(  ITparenEscape True
+                                --  or $$(  ITparenEscape False 
   | ITtyQuote                   --  ''
   | ITquasiQuote (FastString,FastString,RealSrcSpan)
     -- ITquasiQuote(quoter, quote, loc)
@@ -2259,9 +2262,9 @@ isALRopen IToparen      = True
 isALRopen ITobrack      = True
 isALRopen ITocurly      = True
 -- GHC Extensions:
-isALRopen IToubxparen   = True
-isALRopen ITparenEscape = True
-isALRopen _             = False
+isALRopen IToubxparen        = True
+isALRopen (ITparenEscape {}) = True
+isALRopen _                  = False
 
 isALRclose :: Token -> Bool
 isALRclose ITof     = True

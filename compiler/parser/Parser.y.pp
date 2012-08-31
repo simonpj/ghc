@@ -342,14 +342,15 @@ incorrect.
  DOCSECTION     { L _ (ITdocSection _ _) }
 
 -- Template Haskell 
-'[|'            { L _ ITopenExpQuote  }       
+'[|'            { L _ ITopenTExpQuote }       
+'[e|'           { L _ ITopenExpQuote  }       
 '[p|'           { L _ ITopenPatQuote  }      
 '[t|'           { L _ ITopenTypQuote  }      
 '[d|'           { L _ ITopenDecQuote  }      
 '|]'            { L _ ITcloseQuote    }
 TH_ID_SPLICE    { L _ (ITidEscape _)  }     -- $x
-'$('            { L _ ITparenEscape   }     -- $( exp )
-TH_TY_QUOTE     { L _ ITtyQuote       }      -- ''T
+TH_SPLICE       { L _ (ITparenEscape _) }   -- $( exp ) or $$( exp )
+TH_TY_QUOTE     { L _ ITtyQuote       }     -- ''T
 TH_QUASIQUOTE   { L _ (ITquasiQuote _) }
 TH_QQUASIQUOTE  { L _ (ITqQuasiQuote _) }
 
@@ -1077,8 +1078,8 @@ atype :: { LHsType RdrName }
         | '(' ctype ')'                  { LL $ HsParTy   $2 }
         | '(' ctype '::' kind ')'        { LL $ HsKindSig $2 $4 }
         | quasiquote                     { L1 (HsQuasiQuoteTy (unLoc $1)) }
-        | '$(' exp ')'                   { LL $ mkHsSpliceTy $2 }
-        | TH_ID_SPLICE                   { LL $ mkHsSpliceTy $ L1 $ HsVar $
+        | TH_SPLICE exp ')'              { LL $ mkHsSpliceTy $1 $2 }
+        | TH_ID_SPLICE                   { LL $ mkHsSpliceTy False $ L1 $ HsVar $
                                            mkUnqual varName (getTH_ID_SPLICE $1) }
                                                       -- see Note [Promotion] for the followings
         | SIMPLEQUOTE qconid                          { LL $ HsTyVar $ unLoc $2 }
@@ -1484,7 +1485,8 @@ aexp2   :: { LHsExpr RdrName }
         | TH_ID_SPLICE          { L1 $ HsSpliceE (mkHsSplice 
                                         (L1 $ HsVar (mkUnqual varName 
                                                         (getTH_ID_SPLICE $1)))) } 
-        | '$(' exp ')'          { LL $ HsSpliceE (mkHsSplice $2) }               
+        | TH_SPLICE exp ')'     { LL $ (if $1 then HsSpliceT else HsSpliceU) 
+                                           (mkHsSplice $2) }               
 
 
         | SIMPLEQUOTE  qvar     { LL $ HsBracket (VarBr True  (unLoc $2)) }

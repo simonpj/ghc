@@ -426,6 +426,15 @@ quotedNameStageErr br
 
 %************************************************************************
 %*                                                                      *
+            Untyped splices
+%*                                                                      *
+%************************************************************************
+
+tcSpliceExprUntyped :: HsSplice Name -> TcRhoType -> TcM (HsExpr TcId)
+tcSpliceExprUntyped (HsSplice name expr)
+
+%************************************************************************
+%*                                                                      *
 \subsection{Splicing an expression}
 %*                                                                      *
 %************************************************************************

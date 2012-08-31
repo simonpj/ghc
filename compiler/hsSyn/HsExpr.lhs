@@ -216,15 +216,15 @@ data HsExpr id
   -----------------------------------------------------------
   -- MetaHaskell Extensions
 
-  | HsBracket    (HsBracket id)
+  | HsBracket    (HsBracket id)         -- Template Haskell quotation
 
   | HsBracketOut (HsBracket Name)       -- Output of the type checker is
-                                        -- the *original*
-                 [PendingSplice]        -- renamed expression, plus
-                                        -- _typechecked_ splices to be
+                                        -- the *original* renamed expression
+                 [PendingSplice]        -- plus _typechecked_ splices to be
                                         -- pasted back in by the desugarer
 
-  | HsSpliceE (HsSplice id)
+  | HsSpliceT (HsSplice id)             -- Typed splice     $e :: t where e :: TExp t
+  | HsSpliceU (HsSplice id)             -- Untyped splice  $$e :: t where e :: Q Exp
 
   | HsQuasiQuoteE (HsQuasiQuote id)
 	-- See Note [Quasi-quote overview] in TcSplice
@@ -517,7 +517,8 @@ ppr_expr (HsSCC lbl expr)
 ppr_expr (HsWrap co_fn e) = pprHsWrapper (pprExpr e) co_fn
 ppr_expr (HsType id)      = ppr id
 
-ppr_expr (HsSpliceE s)       = pprSplice s
+ppr_expr (HsSpliceT s)       = ptext (sLit "$")  <> pprSplice s
+ppr_expr (HsSpliceU s)       = ptext (sLit "$$") <> pprSplice s
 ppr_expr (HsBracket b)       = pprHsBracket b
 ppr_expr (HsBracketOut e []) = ppr e
 ppr_expr (HsBracketOut e ps) = ppr e $$ ptext (sLit "pending") <+> ppr ps
@@ -1180,7 +1181,7 @@ pprQuals quals = interpp'SP quals
 %************************************************************************
 
 \begin{code}
-data HsSplice id  = HsSplice            --  $z  or $(f 4)
+data HsSplice id = HsSplice             --  $z  or $(f 4)
                         id              -- The id is just a unique name to
                         (LHsExpr id)    -- identify this splice point
   deriving (Data, Typeable)
@@ -1190,7 +1191,7 @@ instance OutputableBndr id => Outputable (HsSplice id) where
 
 pprSplice :: OutputableBndr id => HsSplice id -> SDoc
 pprSplice (HsSplice n e)
-    = char '$' <> ifPprDebug (brackets (ppr n)) <> eDoc
+    = ifPprDebug (brackets (ppr n)) <> eDoc
     where
           -- We use pprLExpr to match pprParendExpr:
           --     Using pprLExpr makes sure that we go 'deeper'
@@ -1201,8 +1202,11 @@ pprSplice (HsSplice n e)
                  HsVar _ -> pp_as_was
                  _ -> parens pp_as_was
 
-data HsBracket id = ExpBr (LHsExpr id)   -- [|  expr  |]
-                  | PatBr (LPat id)      -- [p| pat   |]
+data HsBracket id = TExpBr (LHsExpr id)  -- Typed quotation  [| length xs |] :: TExp Int
+
+                  -- The rest are untyped, in the sense that we do not typecheck the payload
+                  | ExpBr (LHsExpr id)   -- [e| expr  |] :: Q Exp
+                  | PatBr (LPat id)      -- [p| pat   |] :: Q Pat
                   | DecBrL [LHsDecl id]	 -- [d| decls |]; result of parser
                   | DecBrG (HsGroup id)  -- [d| decls |]; result of renamer
                   | TypBr (LHsType id)   -- [t| type  |]
@@ -1215,7 +1219,8 @@ instance OutputableBndr id => Outputable (HsBracket id) where
 
 
 pprHsBracket :: OutputableBndr id => HsBracket id -> SDoc
-pprHsBracket (ExpBr e) 	 = thBrackets empty (ppr e)
+pprHsBracket (TExpBr e)  = thBrackets empty      (ppr e)
+pprHsBracket (ExpBr e) 	 = thBrackets (char 'e') (ppr e)
 pprHsBracket (PatBr p) 	 = thBrackets (char 'p') (ppr p)
 pprHsBracket (DecBrG gp) = thBrackets (char 'd') (ppr gp)
 pprHsBracket (DecBrL ds) = thBrackets (char 'd') (vcat (map ppr ds))
